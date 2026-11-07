@@ -70,6 +70,8 @@ flutter run -d linux
 ```bash
 honor_mtk_unlocker check
 honor_mtk_unlocker root ./vendor/DFRoot.apk
+honor_mtk_unlocker unlock --out ./backup --danger-do-it --apk ./vendor/DFRoot.apk
+```
 ## FAQ
 
 ### Does it work on Snapdragon devices or other Honor models?
@@ -95,8 +97,7 @@ against known signatures. If a build shares the same unlock init code, it is
 patched and flashed. If the bytes differ, it is refused with the unsupported
 firmware notice, and nothing is written.
 
-honor_mtk_unlocker unlock --out ./backup --danger-do-it --apk ./vendor/DFRoot.apk
-```
+
 
 ## Supported firmware
 
