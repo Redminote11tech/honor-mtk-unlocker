@@ -383,6 +383,7 @@ impl Server {
                 ("lk_a", 4u64),
                 ("lk_b", 4u64),
                 ("preloader", 8u64),
+                ("efuse", 2u64), // present on some MTK builds; read-only
             ];
             for (name, mb) in targets {
                 let block = if name == "preloader" {
