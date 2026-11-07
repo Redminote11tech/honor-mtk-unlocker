@@ -93,6 +93,45 @@ pub fn collect_device_info(adb: &Adb, serial: &str) -> Result<DeviceInfo, String
         is_mtk,
     })
 }
+
+/// Best-effort auto tap of the DFRoot "Launch root" button using
+/// uiautomator, so the flow can run unattended when a UI is present.
+/// Returns false (never errors) when the button cannot be found.
+pub fn auto_tap_launch_root(adb: &Adb) -> bool {
+    thread::sleep(Duration::from_millis(2500));
+    let xml = match adb.shell(
+        "uiautomator dump /data/local/tmp/ui.xml >/dev/null 2>&1; \
+         cat /data/local/tmp/ui.xml",
+    ) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    for node in xml.split("<node ") {
+        let lower = node.to_lowercase();
+        if lower.contains("text=") && lower.contains("launch") && lower.contains("root") {
+            if let Some((x, y)) = extract_tap_point(node) {
+                return adb.shell(&format!("input tap {x} {y}")).is_ok();
+            }
+        }
+    }
+    false
+}
+
+fn extract_tap_point(node: &str) -> Option<(i32, i32)> {
+    let b = node.find("bounds=\"")?;
+    let rest = &node[b + 8..];
+    let end = rest.find('"')?;
+    let spec = &rest[..end];
+    let nums: Vec<i32> = spec
+        .split(|c: char| !c.is_ascii_digit() && c != '-')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    if nums.len() >= 4 {
+        Some(((nums[0] + nums[2]) / 2, (nums[1] + nums[3]) / 2))
+    } else {
+        None
+    }
+}
 /// Prepare the DFRoot channel: clear the gate, install the APK if missing,
 /// launch the app. Does not wait for root.
 pub fn prepare_dfroot(adb: &Adb, serial: &str, apk_path: &str) -> Result<RootSession, String> {
@@ -117,9 +156,11 @@ pub fn prepare_dfroot(adb: &Adb, serial: &str, apk_path: &str) -> Result<RootSes
         s.adb.install_apk(apk_path)?;
     }
 
-    // 3. launch the app (user must tap LAUNCH ROOT).
+    // 3. launch the app and attempt to auto-tap "Launch root". If the tap
+    // misses (delayed UI, different layout), the manual prompt remains.
     let launcher = s.adb.resolve_launcher(DFROOT_PKG)?;
     s.adb.start_launcher(&launcher)?;
+    auto_tap_launch_root(&s.adb);
     s.adb.shell(&format!("rm -f {} {}", out_file(), cmd_file()))?;
     Ok(s)
 }
