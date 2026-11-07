@@ -1,0 +1,62 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test core
+        run: cd core && cargo test
+      - name: Build core (release)
+        run: cd core && cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: honor-core-linux
+          path: core/target/release/honor_mtk_unlocker
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Install Linux desktop deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libgtk-3-dev clang cmake pkg-config
+      - name: Analyze
+        run: cd ui && flutter pub get && flutter analyze
+      - name: Build Linux bundle (release)
+        run: cd ui && flutter build linux --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: honor-ui-linux
+          path: ui/build/linux/x64/release/bundle
+
+  package:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Arch package in archlinux container
+        run: |
+          docker run --rm -v "$PWD":/src -w /src/packaging/cachyos \
+            archlinux/archlinux:latest bash -c "
+              pacman -Sy --noconfirm base-devel rust flutter cmake ninja clang pkgconf imagemagick gtk3 >/dev/null
+              useradd -m builder
+              chown -R builder:builder /src
+              su builder -c './make-src.sh && makepkg -f'
+              find . -maxdepth 1 -name '*.pkg.tar.zst' -exec mv {} /src/ \;
+            "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: honor-mtk-unlocker-pkg
+          path: honor-mtk-unlocker-*.pkg.tar.zst

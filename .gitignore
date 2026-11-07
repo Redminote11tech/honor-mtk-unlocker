@@ -1,0 +1,16 @@
+/core/target/
+/ui/build/
+/ui/.dart_tool/
+/ui/.flutter-plugins*
+/ui/android/
+/ui/ios/
+/ui/web/
+/ui/windows/
+/ui/macos/
+packaging/cachyos/src/
+packaging/cachyos/pkg/
+packaging/cachyos/*.pkg.tar.zst
+packaging/cachyos/*.tar.gz
+honor-mtk-unlocker-output/
+honor-tool-output/
+*.log

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Honor MTK Unlocker
+Comment=Honor 90 Lite bootloader unlock wizard (beta)
+Exec=honor-mtk-unlocker
+Icon=honor-mtk-unlocker
+Terminal=false
+Categories=Utility;System;
+Keywords=android;bootloader;unlock;honor;adb;

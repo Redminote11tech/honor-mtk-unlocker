@@ -1,0 +1,19 @@
+# Legacy cleanup: the first (untracked) "honor-tool" package left a desktop
+# entry and icons on disk. pacman cannot remove untracked files, so we remove
+# them here — before install/upgrade — so the menu never shows the old entry.
+
+_remove_legacy_entries() {
+  rm -f /usr/share/applications/honor-tool.desktop
+  rm -f /usr/share/icons/hicolor/scalable/apps/honor-tool.svg
+  for s in 64 128 256 512; do
+    rm -f "/usr/share/icons/hicolor/${s}x${s}/apps/honor-tool.png"
+  done
+}
+
+pre_install() {
+  _remove_legacy_entries
+}
+
+pre_upgrade() {
+  _remove_legacy_entries
+}

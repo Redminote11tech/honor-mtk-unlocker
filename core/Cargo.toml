@@ -1,0 +1,21 @@
+[package]
+name = "honor_core"
+version = "0.1.0"
+edition = "2021"
+description = "Honor Tool core: device check, temproot, LK/seccfg parse & patch, unlock orchestration."
+license = "MIT"
+
+[lib]
+name = "honor_core"
+path = "src/lib.rs"
+
+[dependencies]
+base64 = "0.22"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[[bin]]
+name = "honor_mtk_unlocker"
+path = "src/bin/honor_mtk_unlocker.rs"

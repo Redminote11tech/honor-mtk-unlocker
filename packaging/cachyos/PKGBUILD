@@ -1,0 +1,76 @@
+# Maintainer: Honor MTK Unlocker developers <dev@example.invalid>
+# Built and tested on CachyOS / Arch Linux (x86_64), Flutter 3.47.x.
+pkgname=honor-mtk-unlocker
+pkgver=0.1.0
+pkgrel=4
+pkgdesc="Honor MTK Unlocker — Honor 90 Lite bootloader unlock wizard (Flutter Material 3 UI + Rust core)"
+arch=('x86_64')
+url="https://example.invalid/honor-mtk-unlocker"
+license=('MIT')
+depends=('gtk3' 'libglvnd')
+makedepends=('rust' 'flutter' 'cmake' 'ninja' 'clang' 'pkgconf' 'imagemagick')
+
+options=(!lto)
+install="honor-mtk-unlocker.install"
+source=("honor-mtk-unlocker-src.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/honor-tool"
+
+  # Isolate Flutter's config/cache; leave HOME intact so rustup/cargo keep
+  # working (cargo on Arch is a rustup shim).
+  export XDG_CONFIG_HOME="$srcdir/config" PUB_CACHE="$srcdir/pub-cache"
+  export FLUTTER_SUPPRESS_ANALYTICS=true CI=true
+  mkdir -p "$XDG_CONFIG_HOME"
+
+  # Rust core
+  CARGO_TARGET_DIR="$srcdir/target" \
+    cargo build --release --manifest-path core/Cargo.toml
+
+  # Flutter UI — the linux/ runner is already in the tree; regenerate it as a
+  # safety net for checkouts that omit it.
+  pushd ui >/dev/null
+  [ -d linux ] || flutter create --platforms=linux --no-pub .
+  flutter pub get
+  flutter build linux --release
+  popd >/dev/null
+}
+
+package() {
+  cd "$srcdir/honor-tool"
+
+  # Rust CLI
+  install -Dm755 "$srcdir/target/release/honor_mtk_unlocker" \
+    "$pkgdir/usr/bin/honor_mtk_unlocker"
+
+  # Flutter release bundle
+  install -d "$pkgdir/opt/honor-mtk-unlocker"
+  cp -a ui/build/linux/x64/release/bundle/. "$pkgdir/opt/honor-mtk-unlocker/"
+
+
+  # Launcher wrapper — points the UI at the installed CLI and the bundled APK.
+  install -Dm755 /dev/stdin "$pkgdir/usr/bin/honor-mtk-unlocker" <<'EOF'
+#!/bin/sh
+export HONOR_MTK_UNLOCKER_BIN=/usr/bin/honor_mtk_unlocker
+export HONOR_DFROOT_APK=/opt/honor-mtk-unlocker/DFRoot.apk
+exec /opt/honor-mtk-unlocker/honor_mtk_unlocker "$@"
+EOF
+
+  # Bundle DFRoot.apk for the GUI (the wizard asks for it otherwise).
+  install -Dm644 vendor/DFRoot.apk \
+    "$pkgdir/opt/honor-mtk-unlocker/DFRoot.apk"
+
+  install -Dm644 packaging/cachyos/honor-mtk-unlocker.desktop \
+    "$pkgdir/usr/share/applications/honor-mtk-unlocker.desktop"
+
+  install -Dm644 packaging/cachyos/honor-mtk-unlocker.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/honor-mtk-unlocker.svg"
+
+  for s in 64 128 256 512; do
+    install -d "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps"
+    convert -background none -resize "${s}x${s}" \
+      packaging/cachyos/honor-mtk-unlocker.svg \
+      "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/honor-mtk-unlocker.png"
+  done
+}
