@@ -70,6 +70,31 @@ flutter run -d linux
 ```bash
 honor_mtk_unlocker check
 honor_mtk_unlocker root ./vendor/DFRoot.apk
+## FAQ
+
+### Does it work on Snapdragon devices or other Honor models?
+
+No. The model gate only accepts Honor 90 Lite models (CRT-NX1, CRT-N31,
+HNCRT-M2). A Snapdragon phone, an Honor 200 Lite, or any other model is
+blocked at the device check with a notice that says the detected model is not
+supported. Even if the gate were bypassed, the tool would fail later because
+the LK and seccfg partitions it needs only exist on the MediaTek layout.
+
+### How is seccfg revalidated after the write?
+
+The tool reads the partition back after writing and compares its SHA-256 to
+the exact bytes it intended to write. A mismatch aborts and tells you to
+restore the backups. Note: seccfg on this device is V4, so the 40 byte
+authenticated region is preserved but not regenerated. The readback verifies
+the written bytes, not the device-authenticated hash.
+
+### What if my build number is not listed, like 9.0.0.182?
+
+Build numbers do not decide anything. The tool matches the actual LK bytes
+against known signatures. If a build shares the same unlock init code, it is
+patched and flashed. If the bytes differ, it is refused with the unsupported
+firmware notice, and nothing is written.
+
 honor_mtk_unlocker unlock --out ./backup --danger-do-it --apk ./vendor/DFRoot.apk
 ```
 

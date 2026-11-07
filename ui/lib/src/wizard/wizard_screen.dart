@@ -224,13 +224,19 @@ class _WizardScreenState extends State<WizardScreen>
       DeviceInfo? info;
       try {
         info = DeviceInfo.fromJson(await _backend.call('check'));
-      } catch (_) {}
+      } catch (_) {
+        info = null; // no device / adb problem
+      }
       if (info != null && info.supported) {
         _device = info;
         _done('device', '${info.model} connected');
         break;
       }
-      await _notice(title: 'Notice', body: 'Connect your honor device to continue');
+      final body = info == null
+          ? 'Connect your honor device to continue'
+          : 'Honor MTK Unlocker supports the Honor 90 Lite (CRT-NX1 / '
+              'CRT-N31). Detected model ${info.model} is not supported.';
+      await _notice(title: 'Notice', body: body);
     }
 
     if (_device!.bootloaderUnlocked == true) {
