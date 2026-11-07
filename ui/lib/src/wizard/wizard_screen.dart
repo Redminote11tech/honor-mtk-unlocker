@@ -310,7 +310,17 @@ class _WizardScreenState extends State<WizardScreen>
 
     if (!plan.proceed) {
       _fail('patch', plan.whyNot.join('; '));
-      throw StateError('Cannot patch: ${plan.whyNot.join('; ')}');
+      final msg = StringBuffer(
+          'Unable to patch LK/Seccfg, unsupported firmware.\n\n');
+      msg.writeln(plan.whyNot.join('\n'));
+      msg.writeln();
+      msg.writeln(
+          'Make an issue about support on GitHub and upload the LK and seccfg '
+          'dumps from:');
+      msg.writeln(_outDir);
+      await _notice(title: 'Unsupported firmware', body: msg.toString());
+      setState(() => _terminal = 'unsupported');
+      return;
     }
     _done('patch', 'Patch verified for ${plan.lkA['variant'] ?? 'build'}');
 
@@ -466,6 +476,16 @@ class _WizardScreenState extends State<WizardScreen>
                             icon: Icons.stop_circle_outlined,
                             title: 'Cancelled',
                             message: 'No changes were written.',
+                            onRestart: _reset,
+                          )
+                        else if (_terminal == 'unsupported')
+                          _TerminalCard(
+                            icon: Icons.error_outline,
+                            title: 'Unsupported firmware',
+                            message:
+                                'No changes were written. File an issue on GitHub '
+                                'and attach the LK and seccfg dumps from '
+                                '$_outDir.',
                             onRestart: _reset,
                           )
                         else if (_error.isNotEmpty && !_running)

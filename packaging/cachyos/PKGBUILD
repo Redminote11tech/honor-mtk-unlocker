@@ -2,7 +2,7 @@
 # Built and tested on CachyOS / Arch Linux (x86_64), Flutter 3.47.x.
 pkgname=honor-mtk-unlocker
 pkgver=0.1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="Honor MTK Unlocker — Honor 90 Lite bootloader unlock wizard (Flutter Material 3 UI + Rust core)"
 arch=('x86_64')
 url="https://example.invalid/honor-mtk-unlocker"
