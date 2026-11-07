@@ -1,11 +1,14 @@
 # Honor MTK Unlocker
 
-Unlock the **Honor 90 Lite** bootloader on **MediaTek MT6833**. Linux first, free and open source.
-
-Honor and Huawei devices are among the hardest to unlock bootloader on. This tool automates the proven route: temporary root via DFRoot, a verified **LK patch** that sets the fb unlockstate, and a guarded **seccfg 0x03** write. No paid service, no cloud, no account.
+Open your **Honor MediaTek** device's bootloader. Fully supported on the
+**Honor 90 Lite** (MT6833), and every other Honor MTK device can produce a
+read-only support dump so new firmware can be added.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Build](https://img.shields.io/badge/build-auto-blueviolet)](https://github.com/Redminote11tech/honor-mtk-unlocker/actions)
+
+Snapdragon and other non-MediaTek devices are rejected. This tool targets
+MediaTek bootloaders only.
 
 ## What it does
 
@@ -42,13 +45,26 @@ cd honor-mtk-unlocker/packaging/cachyos
 makepkg -si
 ```
 
-Or download the release package and install with pacman:
+Or download a release package and install with pacman:
 
 ```bash
-sudo pacman -U honor-mtk-unlocker-0.1.0-3-x86_64.pkg.tar.zst
+sudo pacman -U honor-mtk-unlocker-0.1.0-7-x86_64.pkg.tar.zst
 ```
 
 Launch "Honor MTK Unlocker" from your application menu.
+
+### Unsupported Honor MediaTek device? Dump for support
+
+Connect the device, run the app, and choose **Dump for support**. The tool
+attempts temporary root, then reads LK, seccfg and preloader and saves them
+with a manifest of device facts. Open an issue on GitHub and attach the dump
+folder. Preloader matters: it decides whether an unsigned or patched LK can
+boot, so the risk of a hard brick can be evaluated before any patch is written
+for your build.
+
+### Full unlock wizard (Honor 90 Lite)
+
+The supported path does everything automatically:
 
 ### Build from source
 
@@ -76,11 +92,11 @@ honor_mtk_unlocker unlock --out ./backup --danger-do-it --apk ./vendor/DFRoot.ap
 
 ### Does it work on Snapdragon devices or other Honor models?
 
-No. The model gate only accepts Honor 90 Lite models (CRT-NX1, CRT-N31,
-HNCRT-M2). A Snapdragon phone, an Honor 200 Lite, or any other model is
-blocked at the device check with a notice that says the detected model is not
-supported. Even if the gate were bypassed, the tool would fail later because
-the LK and seccfg partitions it needs only exist on the MediaTek layout.
+No. Snapdragon and other non-MediaTek devices are rejected at the device
+check. Other Honor MediaTek devices (for example the Honor 200 Lite) are not
+unlocked, but they can generate a read-only support dump, LK, seccfg and
+preloader, so new firmware can be evaluated and added.
+
 
 ### How is seccfg revalidated after the write?
 

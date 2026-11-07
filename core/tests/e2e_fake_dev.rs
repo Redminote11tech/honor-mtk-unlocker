@@ -109,6 +109,11 @@ fn fake_device_full_flow() {
         &out_file,
     );
     assert!(ok, "partitions failed:\n{out}");
+
+    // 3b. check still passes for a supported model with an MTK platform.
+    let (ok2, out2, _) = run(bin, &["check"], &sb, &cmd_file, &out_file);
+    assert!(ok2, "check failed on mtk device:\n{out2}");
+    assert!(out2.contains("(supported)"), "expected supported marker:\n{out2}");
     assert!(out.contains("lk_a"), "lk_a missing:\n{out}");
     assert!(out.contains("seccfg"), "seccfg missing:\n{out}");
 

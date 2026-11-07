@@ -40,6 +40,32 @@ pub fn is_honor90_lite(model: &str) -> bool {
     m.starts_with("CRT-N") || m.starts_with("HNCRT-M") || m.contains("90 LITE")
 }
 
+/// True when the SoC is MediaTek: platform starts with mt, or the SoC model
+/// contains MT. Snapdragon and others fail this.
+pub fn is_mtk_platform(platform: &str, soc_model: &str) -> bool {
+    platform.starts_with("mt") || soc_model.to_ascii_uppercase().contains("MT")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mtk_detected() {
+        assert!(is_mtk_platform("mt6833", ""));
+        assert!(is_mtk_platform("", "MT6833"));
+        assert!(is_mtk_platform("mt6765", "MT6765"));
+    }
+
+    #[test]
+    fn snapdragon_rejected() {
+        assert!(!is_mtk_platform("sm7125", ""));
+        assert!(!is_mtk_platform("", "SM7125"));
+        assert!(!is_mtk_platform("qcom", ""));
+        assert!(!is_mtk_platform("", ""));
+    }
+}
+
 pub fn collect_device_info(adb: &Adb, serial: &str) -> Result<DeviceInfo, String> {
     let prop = |k: &str| adb.getprop(k).unwrap_or_default();
     let model = prop("ro.product.model");
@@ -47,6 +73,9 @@ pub fn collect_device_info(adb: &Adb, serial: &str) -> Result<DeviceInfo, String
     let sdk = prop("ro.build.version.sdk");
     let abi = prop("ro.product.cpu.abi");
     let slot = prop("ro.boot.slot_suffix");
+    let platform = prop("ro.board.platform");
+    let soc_model = prop("ro.soc.model");
+    let is_mtk = is_mtk_platform(&platform, &soc_model);
     Ok(DeviceInfo {
         serial: serial.to_string(),
         model: model.clone(),
@@ -59,6 +88,9 @@ pub fn collect_device_info(adb: &Adb, serial: &str) -> Result<DeviceInfo, String
         supported: is_honor90_lite(&model),
         bootloader_unlocked: None,
         root_present: false,
+        platform,
+        soc_model,
+        is_mtk,
     })
 }
 /// Prepare the DFRoot channel: clear the gate, install the APK if missing,

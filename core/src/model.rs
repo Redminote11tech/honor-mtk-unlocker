@@ -114,6 +114,13 @@ pub struct DeviceInfo {
     pub bootloader_unlocked: Option<bool>,
     /// True when a live uid-0 channel is available.
     pub root_present: bool,
+    /// `ro.board.platform` (for example mt6833).
+    pub platform: String,
+    /// `ro.soc.model` (for example MT6833).
+    pub soc_model: String,
+    /// True when the SoC is MediaTek (platform starts with mt, or soc model
+    /// contains MT). Snapdragon and others are rejected.
+    pub is_mtk: bool,
 }
 
 /// Convenience hex helpers (kept tiny; `hex` crate used for formatting).

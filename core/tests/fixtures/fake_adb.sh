@@ -31,7 +31,8 @@ case "${1:-}" in
       getprop\ ro.product.device) echo k6833v1_64_k419; exit 0 ;;
       getprop\ ro.boot.slot_suffix) echo _a; exit 0 ;;
       getprop\ ro.build.version.sdk) echo 35; exit 0 ;;
-      getprop\ ro.product.cpu.abi) echo arm64-v8a; exit 0 ;;
+      getprop\ ro.board.platform) echo "${FAKE_PLATFORM:-mt6833}"; exit 0 ;;
+      getprop\ ro.soc.model) echo "${FAKE_SOC_MODEL:-MT6833}"; exit 0 ;;
       getprop\ ro.boot.flash.locked) echo "${FAKE_FLASH_LOCKED:-1}"; exit 0 ;;
       getprop\ ro.boot.verifiedbootstate) echo orange; exit 0 ;;
       getprop\ persist.log.tag) echo V; exit 0 ;;

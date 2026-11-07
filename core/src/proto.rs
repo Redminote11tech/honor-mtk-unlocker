@@ -21,7 +21,7 @@ use crate::lk;
 use crate::partition;
 use crate::seccfg;
 use crate::unlock;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_json::json;
 use std::io::{BufRead, Write};
@@ -54,12 +54,40 @@ struct Server {
     outdir: PathBuf,
 }
 
+#[derive(Serialize)]
+struct DumpFileEntry {
+    name: String,
+    size: usize,
+    sha256: String,
+    saved_as: String,
+}
+
+#[derive(Serialize)]
+struct SupportManifest {
+    app_version: String,
+    created_at: String,
+    device: serde_json::Value,
+    root_status: String,
+    files: Vec<DumpFileEntry>,
+    failures: Vec<serde_json::Value>,
+    notes: Vec<String>,
+}
+
 fn arg_string(args: &Value, key: &str) -> Option<String> {
     args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
 }
 
 fn arg_u64(args: &Value, key: &str) -> Option<u64> {
     args.get(key).and_then(|v| v.as_u64())
+}
+
+fn now_iso8601() -> String {
+    // Simple UTC timestamp; avoids pulling chrono for one string.
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("{secs} (unix seconds)")
 }
 
 impl Server {
@@ -89,6 +117,10 @@ impl Server {
                     .unwrap_or_else(|| self.outdir.clone());
                 let mb = arg_u64(&req.args, "max_mb").unwrap_or(64);
                 self.cmd_read_partition(id, name, path, out, mb)
+            }
+            "dump_support" => {
+                let root_error = arg_string(&req.args, "root_error").unwrap_or_default();
+                self.cmd_dump_support(id, root_error)
             }
             "unlock_plan" => self.cmd_unlock_plan(id),
             "unlock_execute" => {
@@ -302,6 +334,117 @@ impl Server {
                 "sha256": sha,
                 "saved_as": saved,
                 "parsed": Value::Object(parsed),
+            })),
+            None,
+        )
+    }
+
+    /// Read-only support dump for unsupported devices: seccfg, LK slots and
+    /// preloader, plus a manifest with device facts. Used to file a GitHub
+    /// support issue. Never writes to the device.
+    fn cmd_dump_support(&self, id: u64, root_error: String) -> Value {
+        let serial = match self.adb.single_device() {
+            Ok(s) => s,
+            Err(e) => return make_response(id, false, None, Some(e)),
+        };
+        let info = match collect_device_info(&self.adb, &serial) {
+            Ok(i) => i,
+            Err(e) => return make_response(id, false, None, Some(e)),
+        };
+        if !info.is_mtk {
+            return make_response(
+                id,
+                false,
+                None,
+                Some("Snapdragon / non-MediaTek device detected; support dumps are only available for MTK devices".to_string()),
+            );
+        }
+
+        let dir = self.outdir.join(format!("support-dump-{serial}"));
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            return make_response(id, false, None, Some(format!("cannot create dump dir: {e}")));
+        }
+
+        let mut files: Vec<DumpFileEntry> = Vec::new();
+        let mut failures: Vec<serde_json::Value> = Vec::new();
+        let mut notes = Vec::new();
+
+        let session = self.session.as_ref();
+        if session.is_none() && root_error.is_empty() {
+            notes.push("no temp root session; partitions were not readable".to_string());
+        }
+        if !root_error.is_empty() {
+            notes.push(format!("temp root failed during this run: {root_error}"));
+        }
+
+        if let Some(sess) = session {
+            let targets = [
+                ("seccfg", 8u64),
+                ("lk_a", 4u64),
+                ("lk_b", 4u64),
+                ("preloader", 8u64),
+            ];
+            for (name, mb) in targets {
+                let block = if name == "preloader" {
+                    crate::partition::resolve_preloader(sess)
+                } else {
+                    crate::partition::resolve_by_name(sess, name)
+                };
+                match block {
+                    Ok(path) => match crate::partition::read_partition(sess, &path, mb) {
+                        Ok(data) => {
+                            let fname = format!("{name}.bin");
+                            let dest = dir.join(&fname);
+                            if let Err(e) = std::fs::write(&dest, &data) {
+                                failures.push(json!({"name": name, "error":
+                                    format!("save failed: {e}")}));
+                                continue;
+                            }
+                            files.push(DumpFileEntry {
+                                name: name.to_string(),
+                                size: data.len(),
+                                sha256: lk::sha256(&data),
+                                saved_as: dest.display().to_string(),
+                            });
+                        }
+                        Err(e) => failures.push(json!({"name": name, "error": e})),
+                    },
+                    Err(e) => failures.push(json!({"name": name, "error": e})),
+                }
+            }
+        }
+
+        let manifest = SupportManifest {
+            app_version: env!("CARGO_PKG_VERSION").to_string(),
+            created_at: now_iso8601(),
+            device: serde_json::to_value(&info).unwrap(),
+            root_status: if root_error.is_empty() {
+                if session.is_some() { "rooted".to_string() } else { "not_attempted".to_string() }
+            } else {
+                format!("failed: {root_error}")
+            },
+            files,
+            failures,
+            notes,
+        };
+
+        let manifest_path = dir.join("manifest.json");
+        if let Err(e) = std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest).unwrap()) {
+            return make_response(id, false, None, Some(format!("cannot write manifest: {e}")));
+        }
+
+        make_response(
+            id,
+            true,
+            Some(json!({
+                "serial": serial,
+                "model": info.model,
+                "dir": dir.display().to_string(),
+                "manifest": manifest_path.display().to_string(),
+                "files": serde_json::to_value(&manifest.files).unwrap(),
+                "failures": serde_json::to_value(&manifest.failures).unwrap(),
+                "notes": serde_json::to_value(&manifest.notes).unwrap(),
+                "root_status": manifest.root_status,
             })),
             None,
         )

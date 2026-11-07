@@ -227,16 +227,40 @@ class _WizardScreenState extends State<WizardScreen>
       } catch (_) {
         info = null; // no device / adb problem
       }
-      if (info != null && info.supported) {
-        _device = info;
+      if (info == null) {
+        await _notice(title: 'Notice', body: 'Connect your honor device to continue');
+        continue;
+      }
+      _device = info;
+      if (info.supported) {
         _done('device', '${info.model} connected');
         break;
       }
-      final body = info == null
-          ? 'Connect your honor device to continue'
-          : 'Honor MTK Unlocker supports the Honor 90 Lite (CRT-NX1 / '
-              'CRT-N31). Detected model ${info.model} is not supported.';
-      await _notice(title: 'Notice', body: body);
+      if (!info.isMtk) {
+        await _notice(
+          title: 'Notice',
+          body: 'Snapdragon / non-MediaTek device detected (${info.model}, '
+              'platform ${info.platform.isEmpty ? 'unknown' : info.platform}). '
+              'Honor MTK Unlocker only supports MediaTek devices.',
+        );
+        setState(() => _terminal = 'rejected');
+        return;
+      }
+      // Honor MediaTek device that is not the 90 Lite: offer a read-only
+      // support dump so a GitHub issue can be filed with real artifacts.
+      final go = await _notice(
+        title: 'Unsupported device',
+        body: '${info.model} is not supported yet. Dump LK, seccfg and '
+            'preloader to open a GitHub support request?',
+        ok: 'Continue',
+        cancel: 'Cancel',
+      );
+      if (go != true) {
+        setState(() => _terminal = 'aborted');
+        return;
+      }
+      await _supportDumpPhase();
+      return;
     }
 
     if (_device!.bootloaderUnlocked == true) {
@@ -244,6 +268,26 @@ class _WizardScreenState extends State<WizardScreen>
       setState(() => _terminal = 'unlocked');
       return;
     }
+  }
+
+  /// Support dump for an unsupported Honor MediaTek device. Read-only on the
+  /// device side; produces a manifest plus partition dumps for a GitHub issue.
+  Future<void> _supportDumpPhase() async {
+    _begin('dump', 'Support dump', 'Attempting temp root…');
+    var rootError = '';
+    try {
+      await _rootPhase();
+      if (_terminal.isNotEmpty) return; // cancelled
+    } catch (e) {
+      rootError = '$e';
+    }
+    if (_terminal.isNotEmpty) return;
+    _begin('dump', 'Support dump', 'Dumping LK, seccfg and preloader…');
+    final res = await _backend.call('dump_support', {'root_error': rootError});
+    setState(() {
+      _terminal = 'dumped';
+      _report = res;
+    });
   }
 
   Future<void> _rootPhase() async {
@@ -484,6 +528,17 @@ class _WizardScreenState extends State<WizardScreen>
                             message: 'No changes were written.',
                             onRestart: _reset,
                           )
+                        else if (_terminal == 'rejected')
+                          _TerminalCard(
+                            icon: Icons.block,
+                            title: 'Non-MediaTek device',
+                            message:
+                                'Honor MTK Unlocker only supports MediaTek '
+                                'devices. No dumps were taken.',
+                            onRestart: _reset,
+                          )
+                        else if (_terminal == 'dumped' && _report != null)
+                          _SupportDumpCard(report: _report!, onRestart: _reset)
                         else if (_terminal == 'unsupported')
                           _TerminalCard(
                             icon: Icons.error_outline,
@@ -608,6 +663,74 @@ class _StepTile extends StatelessWidget {
         subtitle: state.detail.isNotEmpty && state.detail != state.label
             ? Text(state.detail, style: const TextStyle(fontSize: 12))
             : null,
+      ),
+    );
+  }
+}
+
+class _SupportDumpCard extends StatelessWidget {
+  const _SupportDumpCard({required this.report, required this.onRestart});
+
+  final Map<String, dynamic> report;
+  final VoidCallback onRestart;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dir = report['dir'] as String? ?? '';
+    final files = (report['files'] as List? ?? []);
+    final notes = (report['notes'] as List? ?? []);
+    final rootStatus = report['root_status'] as String? ?? '';
+    return Card(
+      color: scheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.support_agent, color: scheme.onPrimaryContainer, size: 34),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Support dump saved',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: scheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('Root status: $rootStatus',
+                style: TextStyle(color: scheme.onPrimaryContainer)),
+            if (files.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('Files:', style: TextStyle(color: scheme.onPrimaryContainer)),
+              for (final f in files.take(6))
+                Text('  • ${f['name']} (${f['sha256']})',
+                    style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
+            ],
+            if (notes.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              for (final n in notes)
+                Text('• $n',
+                    style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
+            ],
+            const SizedBox(height: 10),
+            Text(
+              'Open an issue at github.com/Redminote11tech/honor-mtk-unlocker '
+              'and attach the whole folder:',
+              style: TextStyle(color: scheme.onPrimaryContainer),
+            ),
+            Text(dir, style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 14),
+            OutlinedButton(onPressed: onRestart, child: const Text('Start over')),
+          ],
+        ),
       ),
     );
   }

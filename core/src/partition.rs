@@ -66,6 +66,16 @@ pub fn resolve_by_name(session: &RootSession, name: &str) -> Result<String, Stri
         .ok_or_else(|| format!("partition '{name}' not found on device"))
 }
 
+/// Resolve the preloader partition. Names vary between builds.
+pub fn resolve_preloader(session: &RootSession) -> Result<String, String> {
+    for name in ["preloader_a", "preloader_b", "preloader"] {
+        if let Ok(p) = resolve_by_name(session, name) {
+            return Ok(p);
+        }
+    }
+    Err("preloader partition not found (looked for preloader_a/_b/preloader)".to_string())
+}
+
 /// Chunk size for channel I/O. A single base64 argument must stay far below
 /// the Linux per-argument limit (MAX_ARG_STRLEN = 128 KiB) — 90 KiB raw
 /// payload arrives as a ~123 KiB argument, leaving headroom.

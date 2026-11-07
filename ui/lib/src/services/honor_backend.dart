@@ -98,6 +98,8 @@ class DeviceInfo {
   final bool supported;
   final bool? bootloaderUnlocked;
   final bool rootPresent;
+  final String platform, socModel;
+  final bool isMtk;
   DeviceInfo.fromJson(Map<String, dynamic> j)
       : serial = j['serial'] as String? ?? '',
         model = j['model'] as String? ?? '',
@@ -107,7 +109,10 @@ class DeviceInfo {
         slot = j['slot'] as String? ?? '',
         supported = (j['supported'] as bool?) ?? false,
         bootloaderUnlocked = j['bootloader_unlocked'] as bool?,
-        rootPresent = (j['root_present'] as bool?) ?? false;
+        rootPresent = (j['root_present'] as bool?) ?? false,
+        platform = j['platform'] as String? ?? '',
+        socModel = j['soc_model'] as String? ?? '',
+        isMtk = (j['is_mtk'] as bool?) ?? false;
 }
 
 class PartitionInfo {
