@@ -5,7 +5,7 @@ Unlock the **Honor 90 Lite** bootloader on **MediaTek MT6833**. Linux first, fre
 Honor and Huawei devices are among the hardest to unlock bootloader on. This tool automates the proven route: temporary root via DFRoot, a verified **LK patch** that sets the fb unlockstate, and a guarded **seccfg 0x03** write. No paid service, no cloud, no account.
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Build](https://img.shields.io/badge/build-auto-blueviolet)](https://github.com/<owner>/honor-mtk-unlocker/actions)
+[![Build](https://img.shields.io/badge/build-auto-blueviolet)](https://github.com/Redminote11tech/honor-mtk-unlocker/actions)
 
 ## What it does
 
@@ -36,7 +36,7 @@ Everything runs on your machine. The only phone requirement is USB debugging ena
 ### CachyOS / Arch package
 
 ```bash
-git clone https://github.com/<owner>/honor-mtk-unlocker.git
+git clone https://github.com/Redminote11tech/honor-mtk-unlocker.git
 cd honor-mtk-unlocker/packaging/cachyos
 ./make-src.sh
 makepkg -si
