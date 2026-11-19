@@ -14,3 +14,6 @@ packaging/cachyos/*.tar.gz
 honor-mtk-unlocker-output/
 honor-tool-output/
 *.log
+/efuse-dump/
+/pl-dump/
+/tee-dump/
