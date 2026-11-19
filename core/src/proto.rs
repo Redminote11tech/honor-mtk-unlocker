@@ -206,6 +206,9 @@ pub fn make_support_pack(
          LK dumps:\n\
          - {lk_a} (sha256 {sha_a})\n\
          - {lk_b} (sha256 {sha_b})\n\n\
+         Attach `lk_a.bin` and `lk_b.bin` to this PR (GitHub allows up to 25 MB\n\
+         attachments). Do not attach seccfg, oeminfo, or any other partition\n\
+         dumps.\n\n\
          These are the stock LK images. A contributor can add a fingerprint to \
          `core/src/lk.rs` (all_recipes) from them.",
         model = identity.model,
