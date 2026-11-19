@@ -10,7 +10,8 @@ pub const BLOCK_SIZE: u64 = 4096;
 /// Discover block partitions. Prefers `/dev/block/by-name/`; falls back to a
 /// scan of `/dev/block/` for known bootloader/security names.
 pub fn discover(session: &RootSession) -> Result<Vec<PartitionInfo>, String> {
-    let byname_dir = std::env::var("HONOR_BYNAME_DIR").unwrap_or_else(|_| "/dev/block/by-name".to_string());
+    let byname_dir =
+        std::env::var("HONOR_BYNAME_DIR").unwrap_or_else(|_| "/dev/block/by-name".to_string());
     let byname = session.exec(&format!(
         "for f in {byname_dir}/*; do b=$(basename $f); t=$(readlink -f $f); \
          [ -e \"$t\" ] && echo \"$b $t\"; done"
@@ -33,8 +34,8 @@ pub fn discover(session: &RootSession) -> Result<Vec<PartitionInfo>, String> {
     if out.is_empty() {
         // Fallback: scan block devices for names of interest.
         let scan = session.exec(
-            "find /dev/block -maxdepth 2 \\( -name 'lk*' -o -name 'seccfg*' \
-             -o -name 'boot*' -o -name 'recovery*' \\) -type b 2>/dev/null",
+            "find /dev/block -maxdepth 2 \\( -name 'lk*' -o -name 'boot*' \
+             -o -name 'recovery*' \\) -type b 2>/dev/null",
         )?;
         for line in scan.lines() {
             let line = line.trim();
@@ -53,8 +54,7 @@ pub fn discover(session: &RootSession) -> Result<Vec<PartitionInfo>, String> {
 }
 
 fn is_recognized(name: &str) -> bool {
-    name.starts_with("lk") || name.contains("seccfg") || name.starts_with("boot")
-        || name.starts_with("recovery")
+    name.starts_with("lk") || name.starts_with("boot") || name.starts_with("recovery")
 }
 
 pub fn resolve_by_name(session: &RootSession, name: &str) -> Result<String, String> {
@@ -77,7 +77,7 @@ pub fn resolve_preloader(session: &RootSession) -> Result<String, String> {
 }
 
 /// Chunk size for channel I/O. A single base64 argument must stay far below
-/// the Linux per-argument limit (MAX_ARG_STRLEN = 128 KiB) — 90 KiB raw
+/// the Linux per-argument limit (MAX_ARG_STRLEN = 128 KiB) - 90 KiB raw
 /// payload arrives as a ~123 KiB argument, leaving headroom.
 pub const CHUNK_BYTES: u64 = 48 * 1024;
 /// Read `blocks` 4096-byte blocks from a block device through the root
@@ -113,7 +113,6 @@ pub fn read_blocks(session: &RootSession, path: &str, blocks: u64) -> Result<Vec
     }
     Ok(out)
 }
-
 
 /// Determine partition size in bytes. Tries blockdev, stat, then wc -c.
 fn partition_size(session: &RootSession, path: &str) -> u64 {
@@ -154,9 +153,7 @@ pub fn write_bytes(session: &RootSession, path: &str, data: &[u8]) -> Result<(),
         let b64 = base64::engine::general_purpose::STANDARD.encode(chunk);
         let redirect = if offset == 0 { ">" } else { ">>" };
         let marker = if offset == 0 { "WROTE" } else { "APPENDED" };
-        let cmd = format!(
-            "printf '%s' '{b64}' | base64 -d {redirect} {path} && echo {marker}"
-        );
+        let cmd = format!("printf '%s' '{b64}' | base64 -d {redirect} {path} && echo {marker}");
         let out = session.exec(&cmd)?;
         if !out.contains(marker) {
             return Err(format!(

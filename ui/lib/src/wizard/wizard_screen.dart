@@ -48,7 +48,8 @@ class _WizardScreenState extends State<WizardScreen>
     final home = Platform.environment['HOME'] ?? '.';
     _outDir = '$home/honor-mtk-unlocker-output';
     _apkPath = Platform.environment['HONOR_DFROOT_APK'] ?? 'vendor/DFRoot.apk';
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))
+    _pulse = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1100))
       ..repeat(reverse: true);
     _bootBackend();
     Timer(const Duration(milliseconds: 3200), () {
@@ -164,7 +165,8 @@ class _WizardScreenState extends State<WizardScreen>
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, c.text.trim()),
             child: const Text('Use'),
@@ -228,7 +230,8 @@ class _WizardScreenState extends State<WizardScreen>
         info = null; // no device / adb problem
       }
       if (info == null) {
-        await _notice(title: 'Notice', body: 'Connect your honor device to continue');
+        await _notice(
+            title: 'Notice', body: 'Connect your honor device to continue');
         continue;
       }
       _device = info;
@@ -247,11 +250,11 @@ class _WizardScreenState extends State<WizardScreen>
         return;
       }
       // Honor MediaTek device that is not the 90 Lite: offer a read-only
-      // support dump so a GitHub issue can be filed with real artifacts.
+      // support pack so a GitHub PR can be filed with real artifacts.
       final go = await _notice(
         title: 'Unsupported device',
-        body: '${info.model} is not supported yet. Dump LK, seccfg and '
-            'preloader to open a GitHub support request?',
+        body: '${info.model} is not supported yet. Create a support pack with '
+            'LK dumps to open a GitHub pull request for your device?',
         ok: 'Continue',
         cancel: 'Cancel',
       );
@@ -264,7 +267,8 @@ class _WizardScreenState extends State<WizardScreen>
     }
 
     if (_device!.bootloaderUnlocked == true) {
-      await _notice(title: 'Notice', body: 'Your bootloader is already unlocked!');
+      await _notice(
+          title: 'Notice', body: 'Your bootloader is already unlocked!');
       setState(() => _terminal = 'unlocked');
       return;
     }
@@ -282,7 +286,7 @@ class _WizardScreenState extends State<WizardScreen>
       rootError = '$e';
     }
     if (_terminal.isNotEmpty) return;
-    _begin('dump', 'Support dump', 'Dumping LK, seccfg and preloader…');
+    _begin('dump', 'Support pack', 'Dumping LK slots…');
     final res = await _backend.call('dump_support', {'root_error': rootError});
     setState(() {
       _terminal = 'dumped';
@@ -333,7 +337,7 @@ class _WizardScreenState extends State<WizardScreen>
         if (attempt < 2) {
           await _notice(
             title: 'Notice',
-            body: 'Root not achieved yet — tap LAUNCH ROOT again.',
+            body: 'Root not achieved yet - tap LAUNCH ROOT again.',
           );
         }
       }
@@ -345,28 +349,27 @@ class _WizardScreenState extends State<WizardScreen>
   }
 
   Future<void> _dumpPhase() async {
-    _begin('dump', 'Dump', 'All checks done, dumping LK and seccfg.');
-    final names = ['seccfg', 'lk_a', 'lk_b'];
+    _begin('dump', 'Dump', 'All checks done, dumping LK.');
+    final names = ['lk_a', 'lk_b'];
     for (final name in names) {
-      await _backend.call('read_partition', {'name': name, 'max_mb': 8});
+      await _backend.call('read_partition', {'name': name, 'max_mb': 4});
     }
-    _done('dump', 'LK + seccfg dumped and parsed');
+    _done('dump', 'LK dumped and parsed');
   }
 
   Future<void> _patchConfirmPhase() async {
     if (_terminal.isNotEmpty) return; // already stopped
-    _begin('patch', 'Patch', 'Patching LK and seccfg');
+    _begin('patch', 'Patch', 'Patching LK');
     final plan = UnlockPlan.fromJson(await _backend.call('unlock_plan'));
 
     if (!plan.proceed) {
       _fail('patch', plan.whyNot.join('; '));
-      final msg = StringBuffer(
-          'Unable to patch LK/Seccfg, unsupported firmware.\n\n');
+      final msg = StringBuffer('Unable to patch LK, unsupported firmware.\n\n');
       msg.writeln(plan.whyNot.join('\n'));
       msg.writeln();
       msg.writeln(
-          'Make an issue about support on GitHub and upload the LK and seccfg '
-          'dumps from:');
+          'Create a support pack from this screen (or the device tab) to make '
+          'a GitHub pull request. LK dumps are saved in:');
       msg.writeln(_outDir);
       await _notice(title: 'Unsupported firmware', body: msg.toString());
       setState(() => _terminal = 'unsupported');
@@ -374,8 +377,9 @@ class _WizardScreenState extends State<WizardScreen>
     }
     _done('patch', 'Patch verified for ${plan.lkA['variant'] ?? 'build'}');
 
-    final body = StringBuffer('This action cannot be reversed once ran, confirm the '
-        'LK and seccfg write.\n\n');
+    final body =
+        StringBuffer('This action cannot be reversed once ran, confirm the '
+            'LK write.\n\n');
     body.writeAll(plan.warnings, '\n');
     final confirm = await _notice(
       title: 'Warning',
@@ -390,11 +394,12 @@ class _WizardScreenState extends State<WizardScreen>
   }
 
   Future<void> _writePhase() async {
-    _begin('write', 'Write', 'Writing LK and seccfg');
+    _begin('write', 'Write', 'Writing LK');
     final report = await _backend.call('unlock_execute');
     _report = report;
     _done('write', 'Write completed');
-    _begin('readback', 'Readback', 'Write has been completed, readback verification');
+    _begin('readback', 'Readback',
+        'Write has been completed, readback verification');
     await Future.delayed(const Duration(milliseconds: 400));
     _done('readback', 'Readback verified');
     setState(() => _terminal = 'done');
@@ -447,7 +452,8 @@ class _WizardScreenState extends State<WizardScreen>
                   color: scheme.primary.withValues(alpha: 0.14),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.lock_open_rounded, size: 54, color: scheme.primary),
+                child: Icon(Icons.lock_open_rounded,
+                    size: 54, color: scheme.primary),
               ),
             ),
             const SizedBox(height: 28),
@@ -462,13 +468,15 @@ class _WizardScreenState extends State<WizardScreen>
             const SizedBox(height: 10),
             Text(
               'preparing…',
-              style: TextStyle(color: scheme.onPrimaryContainer.withValues(alpha: 0.7)),
+              style: TextStyle(
+                  color: scheme.onPrimaryContainer.withValues(alpha: 0.7)),
             ),
             const SizedBox(height: 24),
             SizedBox(
               width: 24,
               height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2.6, color: scheme.primary),
+              child: CircularProgressIndicator(
+                  strokeWidth: 2.6, color: scheme.primary),
             ),
           ],
         ),
@@ -507,7 +515,7 @@ class _WizardScreenState extends State<WizardScreen>
             const SizedBox(height: 12),
             Expanded(
               child: _steps.isEmpty && !_running
-                  ? _StartCard(onStart: _run)
+                  ? _StartCard(onStart: _run, onSupportPack: _supportDumpPhase)
                   : ListView(
                       children: [
                         for (final s in _steps) _StepTile(state: s),
@@ -544,9 +552,9 @@ class _WizardScreenState extends State<WizardScreen>
                             icon: Icons.error_outline,
                             title: 'Unsupported firmware',
                             message:
-                                'No changes were written. File an issue on GitHub '
-                                'and attach the LK and seccfg dumps from '
-                                '$_outDir.',
+                                'No changes were written. Create a support pack '
+                                'on the device tab to make a GitHub pull request; '
+                                'LK dumps are saved in $_outDir.',
                             onRestart: _reset,
                           )
                         else if (_error.isNotEmpty && !_running)
@@ -581,7 +589,8 @@ class _WizardScreenState extends State<WizardScreen>
 // ---------------------------------------------------------------------------
 
 class _CurrentPhaseCard extends StatelessWidget {
-  const _CurrentPhaseCard({required this.label, required this.busy, required this.error});
+  const _CurrentPhaseCard(
+      {required this.label, required this.busy, required this.error});
 
   final String label;
   final bool busy;
@@ -599,14 +608,18 @@ class _CurrentPhaseCard extends StatelessWidget {
               width: 26,
               height: 26,
               child: busy
-                  ? CircularProgressIndicator(strokeWidth: 2.6, color: scheme.primary)
-                  : Icon(error.isNotEmpty ? Icons.error_outline : Icons.check_circle_outline,
+                  ? CircularProgressIndicator(
+                      strokeWidth: 2.6, color: scheme.primary)
+                  : Icon(
+                      error.isNotEmpty
+                          ? Icons.error_outline
+                          : Icons.check_circle_outline,
                       color: error.isNotEmpty ? scheme.error : scheme.primary),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Text(
-                label.isEmpty ? 'Ready — press Start to begin.' : label,
+                label.isEmpty ? 'Ready - press Start to begin.' : label,
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   color: error.isNotEmpty ? scheme.error : scheme.onSurface,
@@ -621,18 +634,30 @@ class _CurrentPhaseCard extends StatelessWidget {
 }
 
 class _StartCard extends StatelessWidget {
-  const _StartCard({required this.onStart});
+  const _StartCard({required this.onStart, required this.onSupportPack});
 
   final VoidCallback onStart;
+  final VoidCallback onSupportPack;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: FilledButton.icon(
-        onPressed: onStart,
-        icon: const Icon(Icons.play_arrow),
-        label: const Text('Start'),
-        style: FilledButton.styleFrom(minimumSize: const Size(180, 52)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FilledButton.icon(
+            onPressed: onStart,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Start'),
+            style: FilledButton.styleFrom(minimumSize: const Size(180, 52)),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: onSupportPack,
+            icon: const Icon(Icons.support_agent),
+            label: const Text('Create support pack (PR)'),
+          ),
+        ],
       ),
     );
   }
@@ -690,7 +715,8 @@ class _SupportDumpCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.support_agent, color: scheme.onPrimaryContainer, size: 34),
+                Icon(Icons.support_agent,
+                    color: scheme.onPrimaryContainer, size: 34),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -709,16 +735,19 @@ class _SupportDumpCard extends StatelessWidget {
                 style: TextStyle(color: scheme.onPrimaryContainer)),
             if (files.isNotEmpty) ...[
               const SizedBox(height: 6),
-              Text('Files:', style: TextStyle(color: scheme.onPrimaryContainer)),
+              Text('Files:',
+                  style: TextStyle(color: scheme.onPrimaryContainer)),
               for (final f in files.take(6))
                 Text('  • ${f['name']} (${f['sha256']})',
-                    style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
+                    style: TextStyle(
+                        color: scheme.onPrimaryContainer, fontSize: 12)),
             ],
             if (notes.isNotEmpty) ...[
               const SizedBox(height: 6),
               for (final n in notes)
                 Text('• $n',
-                    style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
+                    style: TextStyle(
+                        color: scheme.onPrimaryContainer, fontSize: 12)),
             ],
             const SizedBox(height: 10),
             Text(
@@ -726,9 +755,13 @@ class _SupportDumpCard extends StatelessWidget {
               'and attach the whole folder:',
               style: TextStyle(color: scheme.onPrimaryContainer),
             ),
-            Text(dir, style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600)),
+            Text(dir,
+                style: TextStyle(
+                    color: scheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w600)),
             const SizedBox(height: 14),
-            OutlinedButton(onPressed: onRestart, child: const Text('Start over')),
+            OutlinedButton(
+                onPressed: onRestart, child: const Text('Start over')),
           ],
         ),
       ),
@@ -756,7 +789,8 @@ class _DoneCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.restart_alt_rounded, color: scheme.onPrimaryContainer, size: 34),
+                Icon(Icons.restart_alt_rounded,
+                    color: scheme.onPrimaryContainer, size: 34),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -776,11 +810,15 @@ class _DoneCard extends StatelessWidget {
             Text('Backups (restore if anything fails):',
                 style: TextStyle(color: scheme.onPrimaryContainer)),
             for (final b in backups.take(5))
-              Text('  • $b', style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
+              Text('  • $b',
+                  style: TextStyle(
+                      color: scheme.onPrimaryContainer, fontSize: 12)),
             const SizedBox(height: 12),
             Text(
-              'Do NOT update via OTA — it overwrites the LK. Do NOT relock.',
-              style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w600),
+              'Do NOT update via OTA - it overwrites the LK. Do NOT relock.',
+              style: TextStyle(
+                  color: scheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 14),
             OutlinedButton(
@@ -818,11 +856,13 @@ class _TerminalCard extends StatelessWidget {
             Icon(icon, size: 44, color: scheme.primary),
             const SizedBox(height: 12),
             Text(title,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             const SizedBox(height: 6),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 14),
-            OutlinedButton(onPressed: onRestart, child: const Text('Start over')),
+            OutlinedButton(
+                onPressed: onRestart, child: const Text('Start over')),
           ],
         ),
       ),

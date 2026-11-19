@@ -10,13 +10,13 @@
 //! - LK patching refuses any firmware whose patch-site bytes do not exactly
 //!   match a known original. Unknown builds are rejected, never guessed at.
 
-pub mod model;
 pub mod lk;
-pub mod seccfg;
+pub mod model;
+
 pub mod adb;
 pub mod device;
 pub mod partition;
-pub mod unlock;
 pub mod proto;
+pub mod unlock;
 
 pub use model::*;

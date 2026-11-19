@@ -6,10 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
-const FAKE_ADB: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/fake_adb.sh"
-);
+const FAKE_ADB: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/fake_adb.sh");
 
 fn unique_tmp() -> PathBuf {
     let ts = std::time::SystemTime::now()
@@ -71,15 +68,12 @@ fn fake_device_full_flow() {
         dev_by_name.join("lk_b"),
     )
     .unwrap();
-    std::fs::copy(
-        format!("{FIXTURES}/seccfg_locked.bin"),
-        dev_by_name.join("seccfg"),
-    )
-    .unwrap();
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(sb.join("bin/id"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(sb.join("bin/id"), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
         std::fs::set_permissions(FAKE_ADB, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
 
@@ -87,7 +81,6 @@ fn fake_device_full_flow() {
     let out_file = sb.join("data/local/tmp/out");
     let outdir = sb.join("out");
     let bin = env!("CARGO_BIN_EXE_honor_mtk_unlocker");
-
 
     // 1. check
     let (ok, out, _) = run(bin, &["check"], &sb, &cmd_file, &out_file);
@@ -113,11 +106,13 @@ fn fake_device_full_flow() {
     // 3b. check still passes for a supported model with an MTK platform.
     let (ok2, out2, _) = run(bin, &["check"], &sb, &cmd_file, &out_file);
     assert!(ok2, "check failed on mtk device:\n{out2}");
-    assert!(out2.contains("(supported)"), "expected supported marker:\n{out2}");
+    assert!(
+        out2.contains("(supported)"),
+        "expected supported marker:\n{out2}"
+    );
     assert!(out.contains("lk_a"), "lk_a missing:\n{out}");
-    assert!(out.contains("seccfg"), "seccfg missing:\n{out}");
 
-    // 4. read-partition (LK) — parse + save
+    // 4. read-partition (LK) - parse + save
     let (ok, out, _) = run(
         bin,
         &[
@@ -135,9 +130,12 @@ fn fake_device_full_flow() {
     );
     assert!(ok, "read-partition failed:\n{out}");
     assert!(out.contains("sha256:"), "no hash:\n{out}");
-    assert!(out.contains("Original(Magicos71)"), "identity not parsed:\n{out}");
+    assert!(
+        out.contains("Original(Magicos71)"),
+        "identity not parsed:\n{out}"
+    );
 
-    // 5. unlock-plan — must proceed
+    // 5. unlock-plan - must proceed
     let (ok, out, err) = run(
         bin,
         &[
@@ -152,9 +150,12 @@ fn fake_device_full_flow() {
         &out_file,
     );
     assert!(ok, "unlock-plan failed:\n{out}\n{err}");
-    assert!(out.contains("\"proceed\": true"), "plan not proceeded:\n{out}\n{err}");
+    assert!(
+        out.contains("\"proceed\": true"),
+        "plan not proceeded:\n{out}\n{err}"
+    );
 
-    // 6. unlock — actually writes; then verify sandbox contents.
+    // 6. unlock - actually writes; then verify sandbox contents.
     let (ok, out, err) = run(
         bin,
         &[
@@ -170,7 +171,10 @@ fn fake_device_full_flow() {
         &out_file,
     );
     assert!(ok, "unlock failed:\n{out}\n{err}");
-    assert!(out.contains("\"readback_ok\": true"), "readback not ok:\n{out}\n{err}");
+    assert!(
+        out.contains("\"readback_ok\": true"),
+        "readback not ok:\n{out}\n{err}"
+    );
 
     // lk_a / lk_b now equal the proven patched image.
     let expected = std::fs::read(format!("{FIXTURES}/lk_71_a_patched.bin")).unwrap();
@@ -178,18 +182,52 @@ fn fake_device_full_flow() {
         let got = std::fs::read(dev_by_name.join(name)).unwrap();
         assert_eq!(got, expected, "{name} not patched byte-identically");
     }
-    // seccfg state word flipped to 0x03, auth region preserved.
-    let seccfg = std::fs::read(dev_by_name.join("seccfg")).unwrap();
-    assert_eq!(&seccfg[0x0c..0x10], &[0x03, 0x00, 0x00, 0x00]);
-    let orig = std::fs::read(format!("{FIXTURES}/seccfg_locked.bin")).unwrap();
-    let mut expect = orig.clone();
-    expect[0x0c..0x10].copy_from_slice(&[0x03, 0x00, 0x00, 0x00]);
-    assert_eq!(seccfg, expect, "seccfg must differ only in the state word");
-
-    // Backups exist.
-    for b in ["lk_a-original.bin", "lk_b-original.bin", "seccfg-original.bin"] {
+    // Backups exist for LK slots only.
+    for b in ["lk_a-original.bin", "lk_b-original.bin"] {
         assert!(outdir.join(b).exists(), "backup {b} missing");
     }
+
+    // 7. support-pack: dumps LK slots, device identity, manifest and PR template.
+    let (ok, out, err) = run(
+        bin,
+        &[
+            "support-pack",
+            "--out",
+            outdir.to_str().unwrap(),
+            "--apk",
+            "DFRoot.apk",
+        ],
+        &sb,
+        &cmd_file,
+        &out_file,
+    );
+    assert!(ok, "support-pack failed:\n{out}\n{err}");
+    assert!(out.contains("CRT-NX1"), "model missing in pack:\n{out}");
+    let pack_dir = std::fs::read_dir(&outdir)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| {
+            p.file_name()
+                .map(|n| n.to_string_lossy().starts_with("support-pack-"))
+                .unwrap_or(false)
+        })
+        .expect("support-pack dir not created");
+    assert!(
+        pack_dir.join("manifest.json").exists(),
+        "manifest.json missing"
+    );
+    assert!(
+        pack_dir.join("PR_TEMPLATE.md").exists(),
+        "PR_TEMPLATE.md missing"
+    );
+    assert!(pack_dir.join("lk_a.bin").exists(), "lk_a.bin missing");
+    let tmpl = std::fs::read_to_string(pack_dir.join("PR_TEMPLATE.md")).unwrap();
+    assert!(
+        tmpl.contains("Device support request"),
+        "template head missing"
+    );
+    assert!(tmpl.contains("CRT-NX1"), "template model missing");
 
     let _ = std::fs::remove_dir_all(&sb);
 }

@@ -5,12 +5,12 @@ use honor_core::device::{collect_device_info, RootSession};
 use honor_core::lk;
 use honor_core::model::FpVariant;
 use honor_core::partition;
-use honor_core::seccfg;
+
 use honor_core::unlock;
 use std::path::PathBuf;
 
 const USAGE: &str = "\
-Honor MTK Unlocker core — Honor 90 Lite (CRT-NX1) bootloader unlock helper
+Honor MTK Unlocker core - Honor 90 Lite (CRT-NX1) bootloader unlock helper
 
 USAGE:
   honor_mtk_unlocker <command> [options]
@@ -21,13 +21,12 @@ COMMANDS:
   partitions                   list block partitions (via root channel)
   read-partition --name lk_a | --path /dev/block/<x> [--out DIR] [--mb N]
                                read partition, save host copy, parse it
-  unlock-plan [--out DIR]      analyze seccfg + LK, print what unlock would do
+  unlock-plan [--out DIR]      analyze LK slots, print what unlock would do
   unlock [--out DIR]           BACKUP + PATCH + WRITE + readback verify
   parse-lk <file>              parse an LK image, print container + identity
   patch-lk <file> [--variant auto|71|9] [--out OUT]
                                patch an LK image (default --out <file>.patched)
-  parse-seccfg <file> [--patch-unlock] [--out OUT]
-                               parse seccfg; optionally patch state to 0x03
+  support-pack [--out DIR]       dump LK slots + device identity for a PR
   serve [--out DIR]            JSON-line server (used by the Flutter UI)
 ";
 
@@ -48,7 +47,8 @@ fn main() {
         "unlock" => cmd_unlock(rest),
         "parse-lk" => cmd_parse_lk(rest),
         "patch-lk" => cmd_patch_lk(rest),
-        "parse-seccfg" => cmd_parse_seccfg(rest),
+        "support-pack" => cmd_support_pack(rest),
+
         "serve" => cmd_serve(rest),
         _ => {
             println!("unknown command: {cmd}\n{USAGE}");
@@ -91,13 +91,24 @@ fn cmd_check() -> Result<(), String> {
     let serial = adb.single_device()?;
     let info = collect_device_info(&adb, &serial)?;
     println!("serial:      {}", info.serial);
-    println!("model:       {} {}", info.model, if info.supported { "(supported)" } else { "(NOT a known Honor 90 Lite)" });
+    println!(
+        "model:       {} {}",
+        info.model,
+        if info.supported {
+            "(supported)"
+        } else {
+            "(NOT a known Honor 90 Lite)"
+        }
+    );
     println!("product:     {}", info.product);
     println!("sdk:        {}", info.sdk);
     println!("abi:         {}", info.abi);
     println!("slot:        {}", info.slot);
     println!("flash.locked: {}", info.flash_locked.unwrap_or_default());
-    println!("verifiedbootstate: {}", info.verified_boot_state.unwrap_or_default());
+    println!(
+        "verifiedbootstate: {}",
+        info.verified_boot_state.unwrap_or_default()
+    );
     if !info.supported {
         return Err(format!("unsupported model {}", info.model));
     }
@@ -110,7 +121,7 @@ fn cmd_root(args: &[String]) -> Result<(), String> {
     let serial = adb.single_device()?;
     println!("[*] bringing up DFRoot (tap LAUNCH ROOT on the phone)…");
     let session = RootSession::bring_up(adb, serial, apk)?;
-    println!("[+] ROOT OK — uid 0 on {}", session.serial);
+    println!("[+] ROOT OK - uid 0 on {}", session.serial);
     println!("    id => {}", session.exec("id")?);
     Ok(())
 }
@@ -161,11 +172,6 @@ fn cmd_read_partition(args: &[String]) -> Result<(), String> {
                 println!("container: id={} blob_len=0x{:x}", h.id, h.blob_len);
             }
             println!("identity: {:?}", lk::identify(&data));
-        } else if n.contains("seccfg") {
-            match seccfg::parse(&data) {
-                Ok(i) => println!("seccfg: valid={} state={} ({})", i.valid, i.state, i.state_label),
-                Err(e) => println!("seccfg parse: {e}"),
-            }
         }
     }
     Ok(())
@@ -216,7 +222,9 @@ fn cmd_parse_lk(args: &[String]) -> Result<(), String> {
 }
 
 fn cmd_patch_lk(args: &[String]) -> Result<(), String> {
-    let file = args.first().ok_or("usage: honor_tool patch-lk <file> [--variant auto|71|9] [--out OUT]")?;
+    let file = args
+        .first()
+        .ok_or("usage: honor_tool patch-lk <file> [--variant auto|71|9] [--out OUT]")?;
     let data = std::fs::read(file).map_err(|e| e.to_string())?;
     let variant = opt(args, "--variant").unwrap_or("auto");
     let outcome = match variant {
@@ -239,36 +247,24 @@ fn cmd_patch_lk(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn cmd_parse_seccfg(args: &[String]) -> Result<(), String> {
-    let file = args.first().ok_or("usage: honor_tool parse-seccfg <file> [--patch-unlock] [--out OUT]")?;
-    let data = std::fs::read(file).map_err(|e| e.to_string())?;
-    let info = seccfg::parse(&data)?;
-    println!("valid:     {}", info.valid);
-    println!("state:     {} ({})", info.state, info.state_label);
-    println!("header_len: 0x{:x}", info.header_len);
-    println!("auth_magic: {}", info.auth_magic);
-
-    if opt(args, "--patch-unlock").is_some() {
-        match seccfg::patch_unlock(&data)? {
-            seccfg::SeccfgPatch::AlreadyUnlocked => println!("already unlocked — nothing patched"),
-            seccfg::SeccfgPatch::Patched(out) => {
-                let out_path = opt(args, "--out")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|| PathBuf::from(format!("{file}.unlocked")));
-                std::fs::write(&out_path, &out).map_err(|e| e.to_string())?;
-                println!(
-                    "patched state -> 0x03; sha256 {}; out {}",
-                    lk::sha256(&out),
-                    out_path.display()
-                );
-                println!("NOTE: authenticated hash region preserved (not regenerated)");
-            }
-        }
-    }
-    Ok(())
-}
-
 fn cmd_serve(args: &[String]) -> Result<(), String> {
     let out = outdir(args);
     honor_core::proto::serve(out)
+}
+
+fn cmd_support_pack(args: &[String]) -> Result<(), String> {
+    let out = outdir(args);
+    let adb = Adb::default();
+    let (session, root_error) = match rooted(args) {
+        Ok(s) => (Some(s), String::new()),
+        Err(e) => (None, e),
+    };
+    let result = honor_core::proto::make_support_pack(&adb, session.as_ref(), &out, &root_error)?;
+    println!("model:        {}", result.model);
+    println!("root_status:  {}", result.root_status);
+    println!("dir:          {}", result.dir.display());
+    println!("manifest:      {}", result.manifest.display());
+    println!("template:      {}", result.template.display());
+    println!("\n{}", result.pr_template);
+    Ok(())
 }

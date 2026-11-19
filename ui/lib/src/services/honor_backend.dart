@@ -139,13 +139,11 @@ class PartitionRead {
 }
 
 class UnlockPlan {
-  final Map<String, dynamic> seccfg;
   final Map<String, dynamic> lkA, lkB;
   final List<String> steps, warnings, whyNot;
   final bool proceed;
   UnlockPlan.fromJson(Map<String, dynamic> j)
-      : seccfg = (j['seccfg'] as Map<String, dynamic>?) ?? {},
-        lkA = (j['lk_a'] as Map<String, dynamic>?) ?? {},
+      : lkA = (j['lk_a'] as Map<String, dynamic>?) ?? {},
         lkB = (j['lk_b'] as Map<String, dynamic>?) ?? {},
         steps = List<String>.from(j['steps'] as List? ?? []),
         warnings = List<String>.from(j['warnings'] as List? ?? []),

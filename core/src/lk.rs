@@ -160,6 +160,28 @@ pub fn identify(data: &[u8]) -> LkIdentity {
     LkIdentity::Unknown
 }
 
+/// Candidate unlock-init site hint for unknown builds. The fb store pattern
+/// `str r5, [r4, #4]` (`c4 f8 04 51`) is a reliable anchor in the unlock
+/// init on MTK LK images. We report every occurrence with its surrounding
+/// bytes so a contributor can derive a new fingerprint.
+pub fn hint_fingerprint(data: &[u8]) -> Vec<usize> {
+    let mut out = Vec::new();
+    if data.len() < PAYLOAD_OFFSET + 4 {
+        return out;
+    }
+    let start = PAYLOAD_OFFSET;
+    let mut i = start;
+    while i + 4 <= data.len() {
+        if &data[i..i + 4] == &[0xc4, 0xf8, 0x04, 0x51] {
+            out.push(i);
+            i += 4;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
 /// Outcome of a patch operation.
 #[derive(Debug, Clone)]
 pub struct PatchOutcome {
@@ -217,7 +239,7 @@ pub fn patch(data: &[u8], variant: FpVariant) -> Result<PatchOutcome, String> {
         .ok_or_else(|| "patch site signature not found in image".to_string())?;
     if &data[site..site + SITE_LEN] != r.expected_before {
         return Err(format!(
-            "patch site @0x{:x} does not match expected original {:?} (got {:?}) — \
+            "patch site @0x{:x} does not match expected original {:?} (got {:?}) - \
              wrong build, refusing",
             site,
             r.expected_before,
@@ -259,8 +281,12 @@ mod tests {
     use super::*;
 
     fn fixture(name: &str) -> Vec<u8> {
-        std::fs::read(format!("{}/tests/fixtures/{}", env!("CARGO_MANIFEST_DIR"), name))
-            .unwrap_or_else(|e| panic!("fixture {} missing: {}", name, e))
+        std::fs::read(format!(
+            "{}/tests/fixtures/{}",
+            env!("CARGO_MANIFEST_DIR"),
+            name
+        ))
+        .unwrap_or_else(|e| panic!("fixture {} missing: {}", name, e))
     }
 
     #[test]
@@ -291,7 +317,10 @@ mod tests {
         let orig = fixture("lk_71_a_original.bin");
         let patched = fixture("lk_71_a_patched.bin");
         assert_eq!(identify(&orig), LkIdentity::Original(FpVariant::Magicos71));
-        assert_eq!(identify(&patched), LkIdentity::Patched(FpVariant::Magicos71));
+        assert_eq!(
+            identify(&patched),
+            LkIdentity::Patched(FpVariant::Magicos71)
+        );
     }
 
     #[test]
@@ -310,8 +339,14 @@ mod tests {
         assert!(!out.already_patched);
         assert_eq!(out.site_offset, 0x403c4);
         assert_eq!(out.after, [0x01, 0x20, 0x00, 0xbf]);
-        assert_eq!(out.data, known, "patched image must be byte-identical to the proven lk-patched.bin");
-        assert_eq!(out.sha256_after, "b40207b4d7a0ca1ce0c553cb9e8bf747020007ea303497308ec3ead1f5b24d2d");
+        assert_eq!(
+            out.data, known,
+            "patched image must be byte-identical to the proven lk-patched.bin"
+        );
+        assert_eq!(
+            out.sha256_after,
+            "b40207b4d7a0ca1ce0c553cb9e8bf747020007ea303497308ec3ead1f5b24d2d"
+        );
     }
 
     #[test]
@@ -323,7 +358,10 @@ mod tests {
         assert_eq!(out.site_offset, 0x4acc0);
         assert_eq!(out.after, [0x01, 0x25, 0x00, 0xbf]);
         assert_eq!(out.data, known);
-        assert_eq!(out.sha256_after, "ec2867329c58f1d8dade8d3eb89c9a86688e27d0e2b4a1e75a95b53b6c1f0ef5");
+        assert_eq!(
+            out.sha256_after,
+            "ec2867329c58f1d8dade8d3eb89c9a86688e27d0e2b4a1e75a95b53b6c1f0ef5"
+        );
     }
 
     #[test]

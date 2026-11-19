@@ -2,8 +2,8 @@
 # Built and tested on CachyOS / Arch Linux (x86_64), Flutter 3.47.x.
 pkgname=honor-mtk-unlocker
 pkgver=0.1.0
-pkgrel=8
-pkgdesc="Honor MTK Unlocker — Honor 90 Lite bootloader unlock wizard (Flutter Material 3 UI + Rust core)"
+pkgrel=10
+pkgdesc="Honor MTK Unlocker - Honor 90 Lite bootloader unlock wizard (Flutter Material 3 UI + Rust core)"
 arch=('x86_64')
 url="https://example.invalid/honor-mtk-unlocker"
 license=('MIT')
@@ -28,7 +28,7 @@ build() {
   CARGO_TARGET_DIR="$srcdir/target" \
     cargo build --release --manifest-path core/Cargo.toml
 
-  # Flutter UI — the linux/ runner is already in the tree; regenerate it as a
+  # Flutter UI - the linux/ runner is already in the tree; regenerate it as a
   # safety net for checkouts that omit it.
   pushd ui >/dev/null
   [ -d linux ] || flutter create --platforms=linux --no-pub .
@@ -49,7 +49,7 @@ package() {
   cp -a ui/build/linux/x64/release/bundle/. "$pkgdir/opt/honor-mtk-unlocker/"
 
 
-  # Launcher wrapper — points the UI at the installed CLI and the bundled APK.
+  # Launcher wrapper - points the UI at the installed CLI and the bundled APK.
   install -Dm755 /dev/stdin "$pkgdir/usr/bin/honor-mtk-unlocker" <<'EOF'
 #!/bin/sh
 export HONOR_MTK_UNLOCKER_BIN=/usr/bin/honor_mtk_unlocker

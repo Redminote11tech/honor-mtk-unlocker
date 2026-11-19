@@ -15,8 +15,6 @@ impl PartitionInfo {
     pub fn kind(&self) -> PartitionKind {
         if self.name.starts_with("lk") {
             PartitionKind::Lk
-        } else if self.name.contains("seccfg") {
-            PartitionKind::Seccfg
         } else if self.name.starts_with("boot") || self.name.starts_with("recovery") {
             PartitionKind::BootImage
         } else {
@@ -28,7 +26,7 @@ impl PartitionInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PartitionKind {
     Lk,
-    Seccfg,
+
     BootImage,
     Other,
 }
@@ -68,7 +66,7 @@ pub enum LkIdentity {
     Original(FpVariant),
     /// Already carries the unlock patch.
     Patched(FpVariant),
-    /// Unknown build — never patch without re-deriving the fingerprint.
+    /// Unknown build - never patch without re-deriving the fingerprint.
     Unknown,
 }
 
@@ -88,15 +86,6 @@ pub struct PatchRecipe {
     pub signature: &'static [u8],
     /// Offset inside `signature` where the patch site starts.
     pub sig_site_rel: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SeccfgInfo {
-    pub valid: bool,
-    pub state: u32,
-    pub state_label: String,
-    pub header_len: u32,
-    pub auth_magic: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

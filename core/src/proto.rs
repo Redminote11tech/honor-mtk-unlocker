@@ -19,13 +19,13 @@ use crate::adb::Adb;
 use crate::device::{collect_device_info, RootSession};
 use crate::lk;
 use crate::partition;
-use crate::seccfg;
+
 use crate::unlock;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use serde_json::json;
+use serde_json::Value;
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
 struct Request {
@@ -55,26 +55,44 @@ struct Server {
 }
 
 #[derive(Serialize)]
-struct DumpFileEntry {
+pub struct DumpFileEntry {
     name: String,
     size: usize,
     sha256: String,
     saved_as: String,
 }
 
+/// Device identity fields used to write a PR support pack.
+#[derive(Serialize)]
+struct DeviceIdentity {
+    model: String,
+    product: String,
+    platform: String,
+    soc_model: String,
+    sdk: String,
+    build_display_id: String,
+    build_incremental: String,
+    kernel_version: String,
+    slot: String,
+    serial: String,
+}
+
 #[derive(Serialize)]
 struct SupportManifest {
     app_version: String,
     created_at: String,
-    device: serde_json::Value,
+    device: DeviceIdentity,
     root_status: String,
     files: Vec<DumpFileEntry>,
     failures: Vec<serde_json::Value>,
     notes: Vec<String>,
+    pr_template: String,
 }
 
 fn arg_string(args: &Value, key: &str) -> Option<String> {
-    args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
+    args.get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
 }
 
 fn arg_u64(args: &Value, key: &str) -> Option<u64> {
@@ -88,6 +106,182 @@ fn now_iso8601() -> String {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     format!("{secs} (unix seconds)")
+}
+
+pub struct SupportPackResult {
+    pub dir: PathBuf,
+    pub manifest: PathBuf,
+    pub template: PathBuf,
+    pub pr_template: String,
+    pub files: Vec<DumpFileEntry>,
+    pub failures: Vec<serde_json::Value>,
+    pub notes: Vec<String>,
+    pub root_status: String,
+    pub model: String,
+    pub serial: String,
+}
+
+/// Create a read-only support pack: dumps both LK slots plus device identity,
+/// and writes a PR template. Never writes to the device.
+pub fn make_support_pack(
+    adb: &Adb,
+    session: Option<&RootSession>,
+    outdir: &Path,
+    root_error: &str,
+) -> Result<SupportPackResult, String> {
+    let serial = adb.single_device()?;
+    let info = collect_device_info(adb, &serial)?;
+    if !info.is_mtk {
+        return Err(
+            "Snapdragon / non-MediaTek device detected; support packs are only available for MTK devices"
+                .to_string(),
+        );
+    }
+
+    let dir = outdir.join(format!("support-pack-{serial}"));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create support pack dir: {e}"))?;
+
+    let mut files: Vec<DumpFileEntry> = Vec::new();
+    let mut failures: Vec<serde_json::Value> = Vec::new();
+    let mut notes = Vec::new();
+
+    if session.is_none() && root_error.is_empty() {
+        notes.push("no temp root session; LK partitions were not readable".to_string());
+    }
+    if !root_error.is_empty() {
+        notes.push(format!("temp root failed during this run: {root_error}"));
+    }
+
+    if let Some(sess) = session {
+        for name in ["lk_a", "lk_b"] {
+            match crate::partition::resolve_by_name(sess, name) {
+                Ok(path) => match crate::partition::read_partition(sess, &path, 4) {
+                    Ok(data) => {
+                        let fname = format!("{name}.bin");
+                        let dest = dir.join(&fname);
+                        if let Err(e) = std::fs::write(&dest, &data) {
+                            failures.push(json!({"name": name, "error":
+                                format!("save failed: {e}")}));
+                            continue;
+                        }
+                        files.push(DumpFileEntry {
+                            name: name.to_string(),
+                            size: data.len(),
+                            sha256: lk::sha256(&data),
+                            saved_as: dest.display().to_string(),
+                        });
+                    }
+                    Err(e) => failures.push(json!({"name": name, "error": e})),
+                },
+                Err(e) => failures.push(json!({"name": name, "error": e})),
+            }
+        }
+    }
+
+    let identity = DeviceIdentity {
+        model: info.model.clone(),
+        product: info.product.clone(),
+        platform: info.platform.clone(),
+        soc_model: info.soc_model.clone(),
+        sdk: info.sdk.clone(),
+        build_display_id: adb.getprop("ro.build.display.id").unwrap_or_default(),
+        build_incremental: adb
+            .getprop("ro.build.version.incremental")
+            .unwrap_or_default(),
+        kernel_version: adb.getprop("ro.kernel.version").unwrap_or_default(),
+        slot: info.slot.clone(),
+        serial: serial.clone(),
+    };
+
+    let pr_template = format!(
+        "## Device support request\n\n\
+         Model: {model}\n\
+         Product: {product}\n\
+         SoC: {platform} / {soc}\n\
+         Build: {build}\n\
+         Incremental: {incr}\n\
+         Kernel: {kernel}\n\
+         SDK: {sdk}\n\
+         Slot: {slot}\n\n\
+         LK dumps:\n\
+         - {lk_a} (sha256 {sha_a})\n\
+         - {lk_b} (sha256 {sha_b})\n\n\
+         These are the stock LK images. A contributor can add a fingerprint to \
+         `core/src/lk.rs` (all_recipes) from them.",
+        model = identity.model,
+        product = identity.product,
+        platform = identity.platform,
+        soc = identity.soc_model,
+        build = identity.build_display_id,
+        incr = identity.build_incremental,
+        kernel = identity.kernel_version,
+        sdk = identity.sdk,
+        slot = identity.slot,
+        lk_a = files
+            .iter()
+            .find(|f| f.name == "lk_a")
+            .map(|f| f.saved_as.clone())
+            .unwrap_or_default(),
+        sha_a = files
+            .iter()
+            .find(|f| f.name == "lk_a")
+            .map(|f| f.sha256.clone())
+            .unwrap_or_default(),
+        lk_b = files
+            .iter()
+            .find(|f| f.name == "lk_b")
+            .map(|f| f.saved_as.clone())
+            .unwrap_or_default(),
+        sha_b = files
+            .iter()
+            .find(|f| f.name == "lk_b")
+            .map(|f| f.sha256.clone())
+            .unwrap_or_default(),
+    );
+
+    let root_status = if root_error.is_empty() {
+        if session.is_some() {
+            "rooted".to_string()
+        } else {
+            "not_attempted".to_string()
+        }
+    } else {
+        format!("failed: {root_error}")
+    };
+
+    let manifest = SupportManifest {
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
+        created_at: now_iso8601(),
+        device: identity,
+        root_status: root_status.clone(),
+        files,
+        failures,
+        notes,
+        pr_template: pr_template.clone(),
+    };
+
+    let manifest_path = dir.join("manifest.json");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&manifest).unwrap(),
+    )
+    .map_err(|e| format!("cannot write manifest: {e}"))?;
+    let template_path = dir.join("PR_TEMPLATE.md");
+    std::fs::write(&template_path, &pr_template)
+        .map_err(|e| format!("cannot write template: {e}"))?;
+
+    Ok(SupportPackResult {
+        dir,
+        manifest: manifest_path,
+        template: template_path,
+        pr_template,
+        files: manifest.files,
+        failures: manifest.failures,
+        notes: manifest.notes,
+        root_status,
+        model: info.model,
+        serial,
+    })
 }
 
 impl Server {
@@ -262,12 +456,7 @@ impl Server {
             },
             (None, Some(p)) => p,
             (None, None) => {
-                return make_response(
-                    id,
-                    false,
-                    None,
-                    Some("give 'name' or 'path'".into()),
-                );
+                return make_response(id, false, None, Some("give 'name' or 'path'".into()));
             }
         };
         let data = match partition::read_partition(session, &block_path, max_mb) {
@@ -278,7 +467,11 @@ impl Server {
 
         // Save host-side copy; never expose raw bytes over the protocol.
         let fname = name.clone().unwrap_or_else(|| {
-            block_path.rsplit('/').next().unwrap_or("partition").to_string()
+            block_path
+                .rsplit('/')
+                .next()
+                .unwrap_or("partition")
+                .to_string()
         });
         let saved = match std::fs::create_dir_all(&out)
             .and_then(|_| std::fs::write(out.join(format!("{fname}.bin")), &data))
@@ -290,17 +483,13 @@ impl Server {
         };
 
         let mut parsed = serde_json::Map::new();
-        let kind = if fname.starts_with("lk") {
-            "lk"
-        } else if fname.contains("seccfg") {
-            "seccfg"
-        } else {
-            "raw"
-        };
-        match kind {
-            "lk" => match lk::parse_header(&data) {
+        if fname.starts_with("lk") {
+            match lk::parse_header(&data) {
                 Ok(h) => {
-                    parsed.insert("container".into(), json!({"blob_len": h.blob_len, "id": h.id}));
+                    parsed.insert(
+                        "container".into(),
+                        json!({"blob_len": h.blob_len, "id": h.id}),
+                    );
                     parsed.insert(
                         "identity".into(),
                         serde_json::to_value(format!("{:?}", lk::identify(&data))).unwrap(),
@@ -309,19 +498,7 @@ impl Server {
                 Err(e) => {
                     parsed.insert("error".into(), json!(e));
                 }
-            },
-            "seccfg" => match seccfg::parse(&data) {
-                Ok(i) => {
-                    parsed.insert(
-                        "seccfg".into(),
-                        serde_json::to_value(&i).unwrap(),
-                    );
-                }
-                Err(e) => {
-                    parsed.insert("error".into(), json!(e));
-                }
-            },
-            _ => {}
+            }
         }
 
         make_response(
@@ -339,9 +516,9 @@ impl Server {
         )
     }
 
-    /// Read-only support dump for unsupported devices: seccfg, LK slots and
-    /// preloader, plus a manifest with device facts. Used to file a GitHub
-    /// support issue. Never writes to the device.
+    /// Read-only support pack: dumps both LK slots plus device identity, and
+    /// writes a PR template. Used to contribute a new device fingerprint.
+    /// Never writes to the device.
     fn cmd_dump_support(&self, id: u64, root_error: String) -> Value {
         let serial = match self.adb.single_device() {
             Ok(s) => s,
@@ -356,13 +533,18 @@ impl Server {
                 id,
                 false,
                 None,
-                Some("Snapdragon / non-MediaTek device detected; support dumps are only available for MTK devices".to_string()),
+                Some("Snapdragon / non-MediaTek device detected; support packs are only available for MTK devices".to_string()),
             );
         }
 
-        let dir = self.outdir.join(format!("support-dump-{serial}"));
+        let dir = self.outdir.join(format!("support-pack-{serial}"));
         if let Err(e) = std::fs::create_dir_all(&dir) {
-            return make_response(id, false, None, Some(format!("cannot create dump dir: {e}")));
+            return make_response(
+                id,
+                false,
+                None,
+                Some(format!("cannot create support pack dir: {e}")),
+            );
         }
 
         let mut files: Vec<DumpFileEntry> = Vec::new();
@@ -371,27 +553,16 @@ impl Server {
 
         let session = self.session.as_ref();
         if session.is_none() && root_error.is_empty() {
-            notes.push("no temp root session; partitions were not readable".to_string());
+            notes.push("no temp root session; LK partitions were not readable".to_string());
         }
         if !root_error.is_empty() {
             notes.push(format!("temp root failed during this run: {root_error}"));
         }
 
         if let Some(sess) = session {
-            let targets = [
-                ("seccfg", 8u64),
-                ("lk_a", 4u64),
-                ("lk_b", 4u64),
-                ("preloader", 8u64),
-            ];
-            for (name, mb) in targets {
-                let block = if name == "preloader" {
-                    crate::partition::resolve_preloader(sess)
-                } else {
-                    crate::partition::resolve_by_name(sess, name)
-                };
-                match block {
-                    Ok(path) => match crate::partition::read_partition(sess, &path, mb) {
+            for name in ["lk_a", "lk_b"] {
+                match crate::partition::resolve_by_name(sess, name) {
+                    Ok(path) => match crate::partition::read_partition(sess, &path, 4) {
                         Ok(data) => {
                             let fname = format!("{name}.bin");
                             let dest = dir.join(&fname);
@@ -414,23 +585,97 @@ impl Server {
             }
         }
 
+        let identity = DeviceIdentity {
+            model: info.model.clone(),
+            product: info.product.clone(),
+            platform: info.platform.clone(),
+            soc_model: info.soc_model.clone(),
+            sdk: info.sdk.clone(),
+            build_display_id: self.adb.getprop("ro.build.display.id").unwrap_or_default(),
+            build_incremental: self
+                .adb
+                .getprop("ro.build.version.incremental")
+                .unwrap_or_default(),
+            kernel_version: self.adb.getprop("ro.kernel.version").unwrap_or_default(),
+            slot: info.slot.clone(),
+            serial: serial.clone(),
+        };
+
+        let pr_template = format!(
+            "## Device support request\n\n\
+             Model: {model}\n\
+             Product: {product}\n\
+             SoC: {platform} / {soc}\n\
+             Build: {build}\n\
+             Incremental: {incr}\n\
+             Kernel: {kernel}\n\
+             SDK: {sdk}\n\
+             Slot: {slot}\n\n\
+             LK dumps:\n\
+             - {lk_a} (sha256 {sha_a})\n\
+             - {lk_b} (sha256 {sha_b})\n\n\
+             These are the stock LK images. A contributor can add a fingerprint to \
+             `core/src/lk.rs` (all_recipes) from them.",
+            model = identity.model,
+            product = identity.product,
+            platform = identity.platform,
+            soc = identity.soc_model,
+            build = identity.build_display_id,
+            incr = identity.build_incremental,
+            kernel = identity.kernel_version,
+            sdk = identity.sdk,
+            slot = identity.slot,
+            lk_a = files
+                .iter()
+                .find(|f| f.name == "lk_a")
+                .map(|f| f.saved_as.clone())
+                .unwrap_or_default(),
+            sha_a = files
+                .iter()
+                .find(|f| f.name == "lk_a")
+                .map(|f| f.sha256.clone())
+                .unwrap_or_default(),
+            lk_b = files
+                .iter()
+                .find(|f| f.name == "lk_b")
+                .map(|f| f.saved_as.clone())
+                .unwrap_or_default(),
+            sha_b = files
+                .iter()
+                .find(|f| f.name == "lk_b")
+                .map(|f| f.sha256.clone())
+                .unwrap_or_default(),
+        );
+
         let manifest = SupportManifest {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             created_at: now_iso8601(),
-            device: serde_json::to_value(&info).unwrap(),
+            device: identity,
             root_status: if root_error.is_empty() {
-                if session.is_some() { "rooted".to_string() } else { "not_attempted".to_string() }
+                if session.is_some() {
+                    "rooted".to_string()
+                } else {
+                    "not_attempted".to_string()
+                }
             } else {
                 format!("failed: {root_error}")
             },
             files,
             failures,
             notes,
+            pr_template: pr_template.clone(),
         };
 
         let manifest_path = dir.join("manifest.json");
-        if let Err(e) = std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest).unwrap()) {
+        if let Err(e) = std::fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        ) {
             return make_response(id, false, None, Some(format!("cannot write manifest: {e}")));
+        }
+        let template_path = dir.join("PR_TEMPLATE.md");
+        if let Err(e) = std::fs::write(&template_path, &pr_template) {
+            return make_response(id, false, None, Some(format!("cannot write template: {e}")));
         }
 
         make_response(
@@ -441,6 +686,8 @@ impl Server {
                 "model": info.model,
                 "dir": dir.display().to_string(),
                 "manifest": manifest_path.display().to_string(),
+                "template": template_path.display().to_string(),
+                "pr_template": pr_template,
                 "files": serde_json::to_value(&manifest.files).unwrap(),
                 "failures": serde_json::to_value(&manifest.failures).unwrap(),
                 "notes": serde_json::to_value(&manifest.notes).unwrap(),
