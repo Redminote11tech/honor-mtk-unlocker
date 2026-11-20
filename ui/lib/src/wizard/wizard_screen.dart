@@ -368,11 +368,19 @@ class _WizardScreenState extends State<WizardScreen>
       msg.writeln(plan.whyNot.join('\n'));
       msg.writeln();
       msg.writeln(
-          'Create a support pack from this screen (or the device tab) to make '
-          'a GitHub pull request. LK dumps are saved in:');
-      msg.writeln(_outDir);
-      await _notice(title: 'Unsupported firmware', body: msg.toString());
-      setState(() => _terminal = 'unsupported');
+          'You can create a support pack with LK dumps to open a GitHub pull '
+          'request for your build.');
+      final go = await _notice(
+        title: 'Unsupported firmware',
+        body: msg.toString(),
+        ok: 'Create support pack',
+        cancel: 'Cancel',
+      );
+      if (go != true) {
+        setState(() => _terminal = 'aborted');
+        return;
+      }
+      await _supportDumpPhase();
       return;
     }
     _done('patch', 'Patch verified for ${plan.lkA['variant'] ?? 'build'}');
