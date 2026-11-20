@@ -104,12 +104,18 @@ honor_mtk_unlocker support-pack --out ./support --apk ./vendor/DFRoot.apk
 |---|---|---|---|
 | MagicOS 7.1 (C431E2R2P2) | 0x403c4 | ff f7 b2 ff | 01 20 00 bf |
 | MagicOS 9 (C431E9R2P3) | 0x4acc0 | 05 46 40 b3 | 01 25 00 bf |
+| MagicOS 10 (LDY-AN00, MT6993) | 0x156a4 (8 sites) | b8 ff ff 97 | 20 00 80 52 |
+
+The MagicOS 7.1 and 9 patches are single-site Thumb-2 stores that force the
+cached FB unlockstate (+0x104) to 1. The MagicOS 10 (Magic8 Pro Air) recipe
+uses eight AArch64 instruction patches plus the CERT2 hash-override bypass so
+the patched container still verifies against BL2_EXT. It is validated against
+the pinned stock and patched container hashes from the upstream
+honor-ldy-an00-lk-unlock project.
 
 Matching is content based. The tool scans the LK payload for known signatures,
 so builds that share the same init code are handled automatically. Unknown
 builds are refused, never guessed.
-
-The patch forces the cached FB unlockstate (+0x104) to 1.
 
 ## Safety
 

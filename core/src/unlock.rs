@@ -209,6 +209,7 @@ pub fn execute(
         let variant = match lk_plan.variant.as_deref() {
             Some(v) if v.starts_with("MagicOS 7.1") => FpVariant::Magicos71,
             Some(v) if v.starts_with("MagicOS 9") => FpVariant::Magicos9,
+            Some(v) if v.starts_with("MagicOS 10") => FpVariant::Magicos10Ldy,
             _ => return Err(format!("{name}: unsupported variant")),
         };
 

@@ -23,7 +23,6 @@ pub struct RootSession {
     pub serial: String,
 }
 
-
 /// Overridable for hermetic tests (HONOR_CMD_FILE / HONOR_OUT_FILE).
 pub fn cmd_file() -> String {
     std::env::var("HONOR_CMD_FILE").unwrap_or_else(|_| CMD_FILE.to_string())
@@ -33,11 +32,16 @@ pub fn out_file() -> String {
     std::env::var("HONOR_OUT_FILE").unwrap_or_else(|_| OUT_FILE.to_string())
 }
 
-/// Model check: Honor 90 Lite is CRT-NX1 / CRT-N31 / HNCRT-M2 (builds begin
-/// with CRT-N).
+/// Model check. Supported devices:
+/// - Honor 90 Lite: CRT-NX1 / CRT-N31 / HNCRT-M2 (CRT-N prefix)
+/// - Magic8 Pro Air: LDY-AN00 / HNLDY-M
 pub fn is_honor90_lite(model: &str) -> bool {
     let m = model.to_ascii_uppercase();
-    m.starts_with("CRT-N") || m.starts_with("HNCRT-M") || m.contains("90 LITE")
+    m.starts_with("CRT-N")
+        || m.starts_with("HNCRT-M")
+        || m.contains("90 LITE")
+        || m.starts_with("LDY-AN00")
+        || m.starts_with("HNLDY-M")
 }
 
 /// True when the SoC is MediaTek: platform starts with mt, or the SoC model
@@ -141,9 +145,9 @@ pub fn prepare_dfroot(adb: &Adb, serial: &str, apk_path: &str) -> Result<RootSes
     };
 
     // 1. clear the DFRoot gate; it refuses when persist.log.tag starts with 'S'.
-    s.adb.setprop("persist.log.tag", "V").map_err(|e| {
-        format!("could not set persist.log.tag (DFRoot gate): {e}")
-    })?;
+    s.adb
+        .setprop("persist.log.tag", "V")
+        .map_err(|e| format!("could not set persist.log.tag (DFRoot gate): {e}"))?;
     let tag = s.adb.getprop("persist.log.tag")?;
     if tag.trim().to_ascii_uppercase().starts_with('S') {
         return Err(format!(
@@ -161,7 +165,8 @@ pub fn prepare_dfroot(adb: &Adb, serial: &str, apk_path: &str) -> Result<RootSes
     let launcher = s.adb.resolve_launcher(DFROOT_PKG)?;
     s.adb.start_launcher(&launcher)?;
     auto_tap_launch_root(&s.adb);
-    s.adb.shell(&format!("rm -f {} {}", out_file(), cmd_file()))?;
+    s.adb
+        .shell(&format!("rm -f {} {}", out_file(), cmd_file()))?;
     Ok(s)
 }
 
@@ -184,7 +189,10 @@ pub fn wait_for_root(session: &RootSession, deadline_secs: u64) -> Result<(), St
             .shell(&format!("ls {} 2>/dev/null", out_file()))
             .unwrap_or_default();
         if ls.trim() == out_file() {
-            let out = session.adb.shell(&format!("cat {}", out_file())).unwrap_or_default();
+            let out = session
+                .adb
+                .shell(&format!("cat {}", out_file()))
+                .unwrap_or_default();
             last_out = out.clone();
             if out.contains("uid=0(root)") {
                 return Ok(());
@@ -210,10 +218,8 @@ impl RootSession {
     /// Run a single command through the root channel and return its stdout.
     pub fn exec(&self, cmd: &str) -> Result<String, String> {
         self.adb.shell(&format!("rm -f {}", out_file()))?;
-        let b64 = base64::Engine::encode(
-            &base64::engine::general_purpose::STANDARD,
-            cmd.as_bytes(),
-        );
+        let b64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, cmd.as_bytes());
         self.adb
             .shell(&format!("echo {b64} | base64 -d > {}", cmd_file()))?;
         for _ in 0..60 {
@@ -231,7 +237,9 @@ impl RootSession {
     }
 
     pub fn is_root(&self) -> bool {
-        self.exec("id").map(|o| o.contains("uid=0(root)")).unwrap_or(false)
+        self.exec("id")
+            .map(|o| o.contains("uid=0(root)"))
+            .unwrap_or(false)
     }
 }
 

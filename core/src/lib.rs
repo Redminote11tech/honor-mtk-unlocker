@@ -10,6 +10,7 @@
 //! - LK patching refuses any firmware whose patch-site bytes do not exactly
 //!   match a known original. Unknown builds are rejected, never guessed at.
 
+pub mod cert;
 pub mod lk;
 pub mod model;
 

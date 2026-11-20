@@ -48,6 +48,9 @@ pub enum FpVariant {
     Magicos71,
     /// MagicOS 9 / Android 15 (9.0.0.202 C431E9R2P3) style init.
     Magicos9,
+    /// MagicOS 10 / Android 16 on MT6993 (LDY-AN00, Magic8 Pro Air).
+    /// Requires the multi-site aarch64 patch plus CERT2 hash-override bypass.
+    Magicos10Ldy,
 }
 
 impl FpVariant {
@@ -55,6 +58,7 @@ impl FpVariant {
         match self {
             FpVariant::Magicos71 => "MagicOS 7.1 (fb-unlock init @ 0x403c4)",
             FpVariant::Magicos9 => "MagicOS 9 (fb-unlock init @ 0x4acc0)",
+            FpVariant::Magicos10Ldy => "MagicOS 10 (LDY-AN00, 8-site patch + CERT2 override)",
         }
     }
 }

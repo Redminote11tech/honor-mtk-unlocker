@@ -24,7 +24,7 @@ COMMANDS:
   unlock-plan [--out DIR]      analyze LK slots, print what unlock would do
   unlock [--out DIR]           BACKUP + PATCH + WRITE + readback verify
   parse-lk <file>              parse an LK image, print container + identity
-  patch-lk <file> [--variant auto|71|9] [--out OUT]
+  patch-lk <file> [--variant auto|71|9|ldy] [--out OUT]
                                patch an LK image (default --out <file>.patched)
   support-pack [--out DIR]       dump LK slots + device identity for a PR
   serve [--out DIR]            JSON-line server (used by the Flutter UI)
@@ -231,7 +231,8 @@ fn cmd_patch_lk(args: &[String]) -> Result<(), String> {
         "auto" => lk::patch_auto(&data)?,
         "71" => lk::patch(&data, FpVariant::Magicos71)?,
         "9" => lk::patch(&data, FpVariant::Magicos9)?,
-        _ => return Err("--variant must be auto|71|9".into()),
+        "ldy" => lk::patch(&data, FpVariant::Magicos10Ldy)?,
+        _ => return Err("--variant must be auto|71|9|ldy".into()),
     };
     let out_path = opt(args, "--out")
         .map(PathBuf::from)
