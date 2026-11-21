@@ -18,7 +18,78 @@ pub fn default_adb_bin() -> PathBuf {
             return PathBuf::from(v);
         }
     }
-    PathBuf::from("adb")
+    // Look for adb next to our own executable first (bundled install).
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let candidate = if cfg!(windows) {
+                dir.join("adb.exe")
+            } else {
+                dir.join("adb")
+            };
+            if candidate.exists() {
+                return candidate;
+            }
+        }
+    }
+    PathBuf::from(if cfg!(windows) { "adb.exe" } else { "adb" })
+}
+
+/// Download Google's official platform-tools and extract `adb` next to our
+/// own executable (or into the current directory as a fallback). Uses the
+/// official Google URL; adb remains Google's binary under the Android SDK
+/// license, we only fetch and place it.
+pub fn fetch_platform_tools() -> Result<PathBuf, String> {
+    let dest_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let zip_name = if cfg!(windows) {
+        "platform-tools-latest-windows.zip"
+    } else if cfg!(target_os = "macos") {
+        "platform-tools-latest-darwin.zip"
+    } else {
+        "platform-tools-latest-linux.zip"
+    };
+    let url = format!("https://dl.google.com/android/repository/{zip_name}");
+    let resp = ureq::get(&url)
+        .call()
+        .map_err(|e| format!("failed to download {url}: {e}"))?;
+    let mut body = Vec::new();
+    use std::io::Read;
+    resp.into_reader()
+        .read_to_end(&mut body)
+        .map_err(|e| e.to_string())?;
+
+    let reader = std::io::Cursor::new(body);
+    let mut archive = zip::ZipArchive::new(reader)
+        .map_err(|e| format!("failed to open platform-tools zip: {e}"))?;
+
+    let adb_name = if cfg!(windows) {
+        "platform-tools/adb.exe"
+    } else {
+        "platform-tools/adb"
+    };
+    let mut found = false;
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        if file.name().replace('\\', "/") == adb_name {
+            let target = dest_dir.join(if cfg!(windows) { "adb.exe" } else { "adb" });
+            let mut out = std::fs::File::create(&target)
+                .map_err(|e| format!("cannot write {}: {e}", target.display()))?;
+            std::io::copy(&mut file, &mut out).map_err(|e| e.to_string())?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755));
+            }
+            found = true;
+            break;
+        }
+    }
+    if !found {
+        return Err(format!("adb not found inside {zip_name}"));
+    }
+    Ok(dest_dir)
 }
 
 impl Adb {
@@ -46,10 +117,7 @@ impl Adb {
             let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
             return Err(format!(
                 "adb {:?} failed ({}): {} {}",
-                args,
-                out.status,
-                stderr,
-                stdout
+                args, out.status, stderr, stdout
             ));
         }
         Ok(String::from_utf8_lossy(&out.stdout).to_string())
@@ -66,7 +134,10 @@ impl Adb {
             .map_err(|e| format!("failed to run {}: {}", self.bin.display(), e))?;
         if !out.status.success() {
             let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            return Err(format!("adb {:?} failed ({}): {}", args, out.status, stderr));
+            return Err(format!(
+                "adb {:?} failed ({}): {}",
+                args, out.status, stderr
+            ));
         }
         Ok(out.stdout)
     }
@@ -86,7 +157,9 @@ impl Adb {
         match serials.len() {
             1 => Ok(serials.remove(0)),
             0 => Err("no device in adb mode; plug in and enable USB debugging".to_string()),
-            n => Err(format!("multiple devices connected ({n}); connect exactly one")),
+            n => Err(format!(
+                "multiple devices connected ({n}); connect exactly one"
+            )),
         }
     }
 

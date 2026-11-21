@@ -48,6 +48,7 @@ fn main() {
         "parse-lk" => cmd_parse_lk(rest),
         "patch-lk" => cmd_patch_lk(rest),
         "support-pack" => cmd_support_pack(rest),
+        "fetch-adb" => cmd_fetch_adb(),
 
         "serve" => cmd_serve(rest),
         _ => {
@@ -267,5 +268,12 @@ fn cmd_support_pack(args: &[String]) -> Result<(), String> {
     println!("manifest:      {}", result.manifest.display());
     println!("template:      {}", result.template.display());
     println!("\n{}", result.pr_template);
+    Ok(())
+}
+
+fn cmd_fetch_adb() -> Result<(), String> {
+    println!("Downloading official platform-tools (Google)…");
+    let dir = honor_core::adb::fetch_platform_tools()?;
+    println!("adb installed next to tool: {}", dir.display());
     Ok(())
 }

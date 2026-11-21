@@ -98,6 +98,27 @@ honor_mtk_unlocker unlock --out ./backup --danger-do-it --apk ./vendor/DFRoot.ap
 honor_mtk_unlocker support-pack --out ./support --apk ./vendor/DFRoot.apk
 ```
 
+### Windows
+
+Requirements: Rust (MSVC toolchain), Flutter (Windows desktop), Visual Studio
+desktop C++ workload.
+
+```powershell
+cd core
+cargo build --release
+
+cd ..\ui
+flutter pub get
+flutter build windows --release
+$env:HONOR_MTK_UNLOCKER_BIN = "$PWD\..\core\target\release\honor_mtk_unlocker.exe"
+flutter run -d windows
+```
+
+adb is not bundled (Google's SDK license restricts redistribution). Run
+`honor_mtk_unlocker.exe fetch-adb` once, or click **Get adb** in the app, to
+download the official platform-tools and place `adb.exe` next to the tool.
+The tool always checks that location before falling back to PATH.
+
 ## Supported firmware
 
 | Build | LK patch site | Original bytes | Replacement |

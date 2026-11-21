@@ -470,7 +470,7 @@ mod tests {
         let c2 = lk.cert2().unwrap().data.clone();
         let (hh, ih) = lk.compute_hashes();
         let got = cert2_override(&c2, &hh, &ih).unwrap();
-        let expect = std::fs::read("/tmp/vec_override.bin").unwrap();
+        let expect = fixture("oracle_override.bin");
         assert_eq!(got, expect, "override must be byte-identical to upstream");
         assert_eq!(got.len(), 1098);
     }
@@ -478,7 +478,7 @@ mod tests {
     #[test]
     fn full_patch_reproduces_oracle() {
         // Oracle reference produced from the byte-flipped image by upstream.
-        let flipped = std::fs::read("/tmp/lk9_flip.bin").unwrap();
+        let flipped = fixture("oracle_flip.bin");
         let img = Image::parse(&flipped).unwrap();
         let mut img = img;
         let (hh, ih) = {
@@ -500,7 +500,7 @@ mod tests {
             set_cert2_data(&mut lk.certs[1], ov);
         }
         let rebuilt = img.rebuild();
-        let expect = std::fs::read("/tmp/lk9_patched_oracle.bin").unwrap();
+        let expect = fixture("oracle_patched.bin");
         assert_eq!(rebuilt, expect, "rebuilt image must match upstream oracle");
     }
 }

@@ -305,6 +305,7 @@ impl Server {
             "root_wait" => self.cmd_root_wait(id),
             "root_status" => self.cmd_root_status(id),
             "ensure_outdir" => self.cmd_ensure_outdir(id),
+            "fetch_adb" => self.cmd_fetch_adb(id),
             "partitions" => self.cmd_partitions(id),
             "read_partition" => {
                 let name = arg_string(&req.args, "name");
@@ -376,6 +377,21 @@ impl Server {
                 None,
             ),
             Err(e) => make_response(id, false, None, Some(format!("cannot create outdir: {e}"))),
+        }
+    }
+
+    fn cmd_fetch_adb(&self, id: u64) -> Value {
+        match crate::adb::fetch_platform_tools() {
+            Ok(dir) => make_response(
+                id,
+                true,
+                Some(json!({
+                    "dir": dir.display().to_string(),
+                    "adb": crate::adb::default_adb_bin().display().to_string(),
+                })),
+                None,
+            ),
+            Err(e) => make_response(id, false, None, Some(e)),
         }
     }
 

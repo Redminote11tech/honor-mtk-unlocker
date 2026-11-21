@@ -45,7 +45,9 @@ class _WizardScreenState extends State<WizardScreen>
   @override
   void initState() {
     super.initState();
-    final home = Platform.environment['HOME'] ?? '.';
+    final home = Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        '.';
     _outDir = '$home/honor-mtk-unlocker-output';
     _apkPath = Platform.environment['HONOR_DFROOT_APK'] ?? 'vendor/DFRoot.apk';
     _pulse = AnimationController(
@@ -422,6 +424,19 @@ class _WizardScreenState extends State<WizardScreen>
     }
   }
 
+  Future<void> _fetchAdb() async {
+    try {
+      await _ensureBackend();
+      final res = await _backend.call('fetch_adb');
+      await _notice(
+        title: 'adb ready',
+        body: 'adb installed at ${res['adb']}.',
+      );
+    } catch (e) {
+      await _notice(title: 'Download failed', body: '$e');
+    }
+  }
+
   // ---- UI -----------------------------------------------------------------
 
   @override
@@ -523,7 +538,11 @@ class _WizardScreenState extends State<WizardScreen>
             const SizedBox(height: 12),
             Expanded(
               child: _steps.isEmpty && !_running
-                  ? _StartCard(onStart: _run, onSupportPack: _supportDumpPhase)
+                  ? _StartCard(
+                      onStart: _run,
+                      onSupportPack: _supportDumpPhase,
+                      onFetchAdb: _fetchAdb,
+                    )
                   : ListView(
                       children: [
                         for (final s in _steps) _StepTile(state: s),
@@ -642,10 +661,15 @@ class _CurrentPhaseCard extends StatelessWidget {
 }
 
 class _StartCard extends StatelessWidget {
-  const _StartCard({required this.onStart, required this.onSupportPack});
+  const _StartCard({
+    required this.onStart,
+    required this.onSupportPack,
+    required this.onFetchAdb,
+  });
 
   final VoidCallback onStart;
   final VoidCallback onSupportPack;
+  final VoidCallback onFetchAdb;
 
   @override
   Widget build(BuildContext context) {
@@ -664,6 +688,12 @@ class _StartCard extends StatelessWidget {
             onPressed: onSupportPack,
             icon: const Icon(Icons.support_agent),
             label: const Text('Create support pack (PR)'),
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: onFetchAdb,
+            icon: const Icon(Icons.download),
+            label: const Text('Get adb'),
           ),
         ],
       ),

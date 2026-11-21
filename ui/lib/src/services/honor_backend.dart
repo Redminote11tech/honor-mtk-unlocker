@@ -25,10 +25,10 @@ class HonorBackend {
     final env = Platform.environment['HONOR_MTK_UNLOCKER_BIN'];
     if (env != null && env.isNotEmpty) return env;
     final rel = Platform.isWindows
-        ? '..\\core\\target\\debug\\honor_mtk_unlocker.exe'
-        : '../core/target/debug/honor_mtk_unlocker';
+        ? '..\\core\\target\\release\\honor_mtk_unlocker.exe'
+        : '../core/target/release/honor_mtk_unlocker';
     if (File(rel).existsSync()) return rel;
-    return 'honor_mtk_unlocker';
+    return Platform.isWindows ? 'honor_mtk_unlocker.exe' : 'honor_mtk_unlocker';
   }
 
   Future<void> start({required String outDir}) async {
