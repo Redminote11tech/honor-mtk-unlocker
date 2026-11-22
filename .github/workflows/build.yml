@@ -41,6 +41,39 @@ jobs:
           name: honor-ui-linux
           path: ui/build/linux/x64/release/bundle
 
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Build Rust core (Windows release)
+        run: cd core && cargo build --release
+      - name: Generate Windows runner if missing
+        working-directory: ui
+        run: |
+          if (-not (Test-Path windows)) {
+            flutter create --platforms=windows --no-pub .
+          }
+      - name: Build Flutter Windows (release)
+        working-directory: ui
+        run: |
+          flutter pub get
+          flutter build windows --release
+      - name: Assemble Windows artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item ui/build/windows/x64/runner/Release/honor_mtk_unlocker.exe dist/
+          Copy-Item core/target/release/honor_mtk_unlocker.exe dist/
+          if (Test-Path vendor/DFRoot.apk) { Copy-Item vendor/DFRoot.apk dist/ }
+          Compress-Archive -Path dist/* -DestinationPath honor-mtk-unlocker-windows.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: honor-mtk-unlocker-windows
+          path: honor-mtk-unlocker-windows.zip
+
   package:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest

@@ -24,16 +24,28 @@ class HonorBackend {
   String _resolveBinary() {
     final env = Platform.environment['HONOR_MTK_UNLOCKER_BIN'];
     if (env != null && env.isNotEmpty) return env;
+    // Next to our own executable first (bundled install).
+    try {
+      final own = Platform.resolvedExecutable;
+      if (own.isNotEmpty) {
+        final dir = File(own).parent.path;
+        final name = Platform.isWindows
+            ? 'honor_mtk_unlocker.exe'
+            : 'honor_mtk_unlocker';
+        final candidate = '$dir${Platform.pathSeparator}$name';
+        if (File(candidate).existsSync()) return candidate;
+      }
+    } catch (_) {}
     final rel = Platform.isWindows
         ? '..\\core\\target\\release\\honor_mtk_unlocker.exe'
         : '../core/target/release/honor_mtk_unlocker';
     if (File(rel).existsSync()) return rel;
     return Platform.isWindows ? 'honor_mtk_unlocker.exe' : 'honor_mtk_unlocker';
   }
-
   Future<void> start({required String outDir}) async {
     final bin = _resolveBinary();
     _proc = await Process.start(bin, ['serve', '--out', outDir]);
+
     _proc!.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen(_onLine);
     _proc!.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((l) {
       if (l.trim().isNotEmpty) {
