@@ -56,6 +56,15 @@ jobs:
           if (-not (Test-Path windows)) {
             flutter create --platforms=windows --no-pub .
           }
+      - name: Static-link VS C++ runtime
+        working-directory: ui/windows
+        shell: pwsh
+        run: |
+          $p = 'CMakeLists.txt'
+          $c = Get-Content $p -Raw
+          $c = 'set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")' + "`n" + $c
+          Set-Content $p $c
+          Get-Content $p | Select-Object -First 3
       - name: Build Flutter Windows (release)
         working-directory: ui
         run: |
